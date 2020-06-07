@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: dbService
+  profiles:
+    active: dev

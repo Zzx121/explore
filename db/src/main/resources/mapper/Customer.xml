@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.edu.djtu.db.dao.CustomerMapper">
+    <cache/>
+    <insert id="insertCustomer">
+        INSERT INTO customer(`name`, gender, cellphone, company, remarks, birthday, gmt_create, is_deleted)
+        VALUES(#{name}, #{gender, typeHandler=cn.edu.djtu.db.entity.handler.GenderTypeHandler}, #{cellphone}, 
+        #{company}, #{remarks}, #{birthday}, #{gmtCreate}, #{isDeleted})
+    </insert>
+    <insert id="batchInsertCustomers">
+        INSERT INTO customer(`name`, gender, cellphone, company, remarks, birthday, gmt_create, is_deleted)
+        VALUES 
+        <foreach collection="customers" separator="," item="customer">
+        (#{customer.name}, #{customer.gender, typeHandler=cn.edu.djtu.db.entity.handler.GenderTypeHandler}, #{customer.cellphone},
+        #{customer.company}, #{customer.remarks}, #{customer.birthday}, #{customer.gmtCreate}, #{customer.isDeleted})
+        </foreach>
+    </insert>
+    <resultMap id="baseMap" type="Customer"/>
+    <select id="listAllCustomer" resultMap="baseMap">
+        SELECT *
+        FROM customer
+        WHERE is_deleted = 0
+    </select>
+</mapper> 

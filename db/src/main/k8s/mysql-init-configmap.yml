@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-initdb-config
+data:
+  initdb.sql: |
+    CREATE DATABASE IF NOT EXISTS test CHARACTER SET=utf8;
+    USE test;
+    CREATE TABLE `customer` (
+      `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT COMMENT '客户id',
+      `name` char(20) CHARACTER SET utf8 DEFAULT NULL COMMENT '用户名',
+      `gender` tinyint(4) unsigned DEFAULT NULL COMMENT '性别 0：男；1：女；2：保密；',
+      `cellphone` char(20) CHARACTER SET utf8 DEFAULT NULL COMMENT '手机号',
+      `company` varchar(50) CHARACTER SET utf8 DEFAULT NULL COMMENT '所属公司',
+      `remarks` varchar(50) CHARACTER SET utf8 DEFAULT NULL COMMENT '备注',
+      `birthday` date DEFAULT NULL COMMENT '生日',
+      `gmt_create` datetime DEFAULT NULL COMMENT '创建时间',
+      `gmt_updated` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+      `is_deleted` tinyint(3) unsigned DEFAULT NULL COMMENT '是否删除 1：删除；0：未删除；',
+      PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+    

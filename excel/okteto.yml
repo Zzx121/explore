@@ -1,0 +1,8 @@
+name: excel-server
+image: maven:3.6-jdk-8-slim
+command: ["bash"]
+volumes:
+  - /root/.m2
+forward:
+  - 8081:8081
+  - 5101:5101

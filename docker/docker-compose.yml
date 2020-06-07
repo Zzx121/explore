@@ -1,0 +1,28 @@
+version: '3.7'
+volumes:
+  mysql-data:
+services:
+  mysql: 
+    image: mysql:5.7.29
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test
+    ports:
+      - 43306:3306
+    
+  dbServer:
+    image: explore/db:mysql
+    ports:
+      - 8081:8081
+    environment:
+      SERVER_PORT: 8081
+      EUREKA_SERVER_URI: http://eurekaServer:8761/eureka/
+      EUREKA_SERVER_PORT: 8761
+      DATABASE_SERVER_PORT: 3306
+          
+  eurekaServer:
+    image: explore/eureka:server
+    ports:
+      - 8761:8761

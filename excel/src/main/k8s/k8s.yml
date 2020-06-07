@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: excel-server
+spec:
+  selector:
+    matchLabels:
+      app: excel-server
+  template:
+    metadata:
+      labels:
+        app: excel-server
+    spec:
+      containers:
+        - name: excel
+          image: deliberato/excel:concurrent
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+              
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: excel-server
+  annotations:
+    dev.okteto.com/auto-ingress: "true"
+  labels:
+    app: excel-server
+spec:
+  type: NodePort
+  ports:
+    - port: 8081
+      name: excel-server
+  selector:
+    app: excel-server
+  
+    
