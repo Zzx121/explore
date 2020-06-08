@@ -45,6 +45,6 @@ There's two solutions:
 1. Invoke the rightPushAll() method, in this way, passed list will be serialized into byte[][] as whole, than send to redis server one time. This is the fasted way to store big volume data into redis, about 0.5s for 100k, but you can't seperate objects, but you can only deserialize as whole.
 2. Invoke execute() method, for loop send each object in the list, store each object as json into list. For performance, enable pipeline to reduce round trip. That way, about 2~3s for 100k.
 
-* About transaction
+* About transaction:  
 Because I use redis for data temporary store, when the data is restored in MySql, data in redis is no longer useful. So I need to delete the data after restore, but in the meantime, there may be unsuccess, so there a transaction needed. Because there's no roll back in redis's transaction, so I need to trigger deletion of the key after successfully restore data into MySql.
 
