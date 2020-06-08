@@ -30,6 +30,10 @@ Each module needs to deploy in k8s, files need for deployment is under src/main/
 4. Config remote debug in your ide, and start the remote debug. Then you can develop and debug your project in the running container,
 but without the image build, push and redeployment.
 
+## Communication between modules(services)
+1. Using RestTemplate, this way is simple to config, but need more redundancy code to invoke interface and disable load balance.
+2. Using openFeign and ribbon, this way need little template code(generate by dynamic proxy) and can utilize load balance.
+
 ## Features
 ### db module
 * MySql
