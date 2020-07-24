@@ -22,4 +22,5 @@ mybatis:
   type-handlers-package: cn.edu.djtu.db.entity.handler
   configuration:
     map-underscore-to-camel-case: true
-
+server:
+  port: 8302
