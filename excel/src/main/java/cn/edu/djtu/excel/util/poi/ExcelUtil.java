@@ -2,16 +2,31 @@ package cn.edu.djtu.excel.util.poi;
 
 import cn.edu.djtu.excel.common.annotation.Excel;
 import cn.edu.djtu.excel.common.annotation.Excels;
+import cn.edu.djtu.excel.common.application.ApplicationUtil;
+import cn.edu.djtu.excel.common.property.ApplicationProperty;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddressList;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFDataValidation;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
 
+import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
@@ -58,15 +73,57 @@ public class ExcelUtil<T> {
      */
     public final Class<T> clazz;
 
+    /**
+     * 对应关系Map中key对应导出到excel的值，value对应要导出的值
+     */
+    private Map<String, Map<String, Object>> expKeyMap;
+
+    String basePath;
+    String excelPath;
+
     public ExcelUtil(Class<T> clazz) {
         this.clazz = clazz;
+    }
+    
+
+    /**
+     * 需要动态传递转换对应关系时调用
+     * @param clazz 实体类Class
+     * @param expKeyMap 表达式对应Map
+     */
+    public ExcelUtil(Class<T> clazz, Map<String, Map<String, Object>> expKeyMap) {
+        this.clazz = clazz;
+        this.expKeyMap = expKeyMap;
+    }
+
+    public void init(List<T> list, String sheetName, Excel.Type type) {
+        if (list == null) {
+            list = new ArrayList<>();
+        }
+        this.list = list;
+        this.sheetName = sheetName;
+        this.type = type;
+        parseExcelFields();
+        createWorkbook();
+    }
+
+    /**
+     * 对list数据源将其里面的数据导入到excel表单
+     *
+     * @param list      导出数据集合
+     * @param sheetName 工作表的名称
+     * @return 结果
+     */
+    public String exportExcel(List<T> list, String sheetName) {
+        this.init(list, sheetName, Excel.Type.EXPORT);
+        return exportExcel();
     }
 
     /**
      * 导出Excel
      * @return 文件名
      */
-    public String exportExcel() throws IllegalAccessException, NoSuchMethodException, InvocationTargetException {
+    public String exportExcel() {
         //sheet数量
         int sheetCount = list.size() / SHEET_SIZE + 1;
         for (int i = 0; i < sheetCount; i++) {
@@ -80,11 +137,45 @@ public class ExcelUtil<T> {
             }
             //渲染内容
             if (Excel.Type.EXPORT.equals(type)) {
-                fillExcelData(i);
+                try {
+                    fillExcelData(i);
+                } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+                    e.printStackTrace();
+                }
             }
         }
         String fileName = encodingFilename(sheetName);
-        return null;
+        OutputStream out = null;
+        try {
+            out = new FileOutputStream(getAbsoluteFile(fileName));
+            wb.write(out);
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (out != null) {
+                    out.close();
+                }
+                wb.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return fileName;
+    }
+    
+    private String getAbsoluteFile(String filename) {
+        ApplicationProperty property = ApplicationUtil.getBean(ApplicationProperty.class);
+        Path path = Paths.get(property.getBasePath(), property.getExcelPath(), filename);
+        if (Files.notExists(path)) {
+            try {
+                Files.createDirectories(path.getParent());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        return path.toString();
     }
     
     private void fillExcelData(int sheetIndex) throws IllegalAccessException, 
@@ -120,13 +211,23 @@ public class ExcelUtil<T> {
 
             Object value = acquireValueByFieldGet(field, vo, attr);
             String exp = attr.readConverterExp();
+            String expKey = attr.readConverterKey();
             String dateFormat = attr.dateFormat();
             //处理日期格式
             if (StringUtils.isNotBlank(dateFormat) && value != null) {
-                cell.setCellValue(DateUtils.parseDateToStr(dateFormat, (Date) value));
+                if (value instanceof Date) {
+                    cell.setCellValue(DateUtils.parseDateToStr(dateFormat, (Date) value));
+                } else if (value instanceof LocalDate) {
+                    cell.setCellValue(((LocalDate) value).format(DateTimeFormatter.ofPattern(dateFormat)));
+                } else if (value instanceof LocalDateTime) {
+                    cell.setCellValue(((LocalDateTime) value).format(DateTimeFormatter.ofPattern(dateFormat)));
+                }
                 //处理表达式对应
             } else if (StringUtils.isNotBlank(exp) && value != null) {
                 cell.setCellValue(convertByExp(String.valueOf(value), exp));
+                //处理动态传递过来的对应关系
+            } else if (StringUtils.isNotBlank(expKey) && value != null) {
+                cell.setCellValue(convertByExpMap(value, expKey));
             } else {
                 cell.setCellValue(value == null ? attr.defaultValue() : (value + attr.suffix()));
             }
@@ -134,7 +235,7 @@ public class ExcelUtil<T> {
     }
 
     /**
-     * 解析导出值 0=男,1=女,2=未知
+     * 解析导出值 如：0=男,1=女,2=未知
      *
      * @param propertyValue 参数值
      * @param exp  翻译注解
@@ -150,6 +251,21 @@ public class ExcelUtil<T> {
         }
         
         return propertyValue;
+    }
+    
+    private String convertByExpMap(Object propertyValue, String expKey) {
+        if (expKeyMap != null) {
+            Map<String, Object> expMap = expKeyMap.get(expKey);
+            if (expMap != null) {
+                for (Map.Entry<String, Object> expEntry : expMap.entrySet()) {
+                    if (propertyValue.equals(expEntry.getValue())) {
+                        return expEntry.getKey();
+                    }
+                }
+            }
+        }
+        
+        return propertyValue.toString();
     }
     
     private Object acquireValueByFieldGet(Field field, T vo, Excel attr) throws IllegalAccessException, 
@@ -317,5 +433,84 @@ public class ExcelUtil<T> {
         return filename + "_" + UUID.randomUUID().toString() + ".xlsx";
     }
 
+    public Object getCellValue(Row row, int column) {
+        if (row == null) {
+            return null;
+        }
+        
+        Object val = "";
+        Cell cell = row.getCell(column);
+        if (cell != null) {
+            CellType cellType = cell.getCellType();
+            if (cellType == CellType.NUMERIC || cellType == CellType.FORMULA) {
+                val = cell.getNumericCellValue();
+                if (DateUtil.isCellDateFormatted(cell)) {
+                    val = DateUtil.getJavaDate((Double) val);
+                } else {
+                    if ((Double) val % 1 > 0) {
+                        val = new DecimalFormat("0.00").format(val);
+                    } else {
+                        val = new DecimalFormat("0").format(val);
+                    }
+                }
+            } else if (cellType == CellType.STRING) {
+                val = cell.getStringCellValue();
+            } else if (cellType == CellType.BOOLEAN) {
+                val = cell.getBooleanCellValue();
+            } else if (cellType == CellType.ERROR) {
+                val = cell.getErrorCellValue();
+            }
+        }
+        
+        return val;
+    }
+    
+    public List<T> importExcel(String sheetName, String filePath, int headerRowIndex) throws IOException {
+        this.type = Excel.Type.IMPORT;
+        this.wb = WorkbookFactory.create(new File(filePath));
+        List<T> list = new ArrayList<>();
+        Sheet sheet;
+        if (StringUtils.isNotBlank(sheetName)) {
+            sheet = wb.getSheet(sheetName);
+        } else {
+            sheet = wb.getSheetAt(0);
+        }
+        
+        if (sheet == null) {
+            throw new IOException("文件sheet不存在");
+        }
+
+        int rows = sheet.getPhysicalNumberOfRows();
+        if (rows > 0) {
+            Row headerRow = sheet.getRow(headerRowIndex);
+            int cells = headerRow.getPhysicalNumberOfCells();
+            this.parseExcelFields();
+            List<String> excelHeaderList = new ArrayList<>();
+            List<String> annotationHeaderList = parseAnnotationHeaderList();
+            for (int i = 0; i < cells; i++) {
+                String cellValue = String.valueOf(getCellValue(headerRow, i));
+                excelHeaderList.add(cellValue);
+            }
+            
+            if (!annotationHeaderList.equals(excelHeaderList)) {
+                
+            }
+            
+        }
+        
+        return list;
+    }
+    
+    private List<String> parseAnnotationHeaderList() {
+        List<String> annotationHeaderList = new ArrayList<>();
+        this.fields.forEach(m -> {
+            Set<Map.Entry<Field, Excel>> entries = m.entrySet();
+            for (Map.Entry<Field, Excel> entry : entries) {
+                annotationHeaderList.add(entry.getValue().name());
+            }
+        });
+        
+        return annotationHeaderList;
+    }
 
 }

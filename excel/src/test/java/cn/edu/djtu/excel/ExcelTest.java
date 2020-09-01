@@ -1,5 +1,6 @@
 package cn.edu.djtu.excel;
 
+import cn.edu.djtu.excel.common.exception.ErrorCodeEnum;
 import cn.edu.djtu.excel.entity.Customer;
 import cn.edu.djtu.excel.entity.Gender;
 import cn.edu.djtu.excel.service.ExcelReader;
@@ -13,12 +14,18 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 import static java.lang.System.out;
 
@@ -397,6 +404,69 @@ public class ExcelTest {
     @Test
     void reflectTest() throws ClassNotFoundException {
     }
+    
+    @Test
+    void streamGroupByTest() {
+        List<DemoData> demoDataList = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            DemoData demoData = new DemoData();
+            demoData.setIgnore(i % 2 == 0 ? "yes" : "no");
+            demoData.setLocalDate(LocalDate.now());
+            demoDataList.add(demoData);
+        }
+
+        Map<String, List<DemoData>> collect = demoDataList.stream().collect(Collectors.groupingBy(DemoData::getIgnore));
+        out.println(collect);
+    }
+    
+    @Test
+    void listContainsTest() {
+        List<Map<String, Long>> l1 = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            Map<String, Long> map = new HashMap<>();
+            map.put("m" + i, (long) i);
+            l1.add(map);
+        }
+
+        Map<String, Long> m1 = new HashMap<>();
+        m1.put("m1", 1L);
+
+        out.println(l1.contains(m1));
+    }
+    
+    @Test
+    void pathTest() throws IOException {
+        String prefix = "/usr/file";
+        String excelPath = "/excel";
+        String filename = "234245253_user.xml";
+        Path path = Paths.get(prefix, excelPath, filename);
+        if (Files.notExists(path)) {
+            Files.createDirectories(path.getParent());
+        }
+        out.println(path.toString());
+    }
+    
+    @Test
+    void testBigDecimal() {
+        BigDecimal a = BigDecimal.valueOf(123);
+        BigDecimal b = BigDecimal.valueOf(13);
+        out.println(b.multiply(BigDecimal.valueOf(100)).divide(a, 2, RoundingMode.HALF_UP));
+        
+    }
+    
+    @Test
+    void listContainsAllTest() {
+        List<String> l1 = Arrays.asList("A", "B", "C", "D");
+        List<String> l2 = Arrays.asList("A", "B", "C", "D");
+//        List<String> l2 = Arrays.asList("A", "C", "B", "D");
+        out.println(l1.equals(l2));
+    }
+    
+    @Test
+    void enumTest() {
+        out.println(ErrorCodeEnum.PHONE_IN_USE.msg());
+    }
+    
     
     
 }

@@ -3,3 +3,7 @@ server:
 spring:
   application:
     name: excel
+file.storage:
+  basePath: /usr/file
+  excelPath: /excel
+

@@ -20,13 +20,16 @@ public class Customer implements Serializable {
     private Integer id;
     @Excel(name = "姓名", width = 12)
     private String name;
+    @Excel(name = "生日", dateFormat = "yyyy-MM-dd")
+    private LocalDate birthday;
+//    @Excel(name = "性别", readConverterExp = "MALE=男,FEMALE=女,SECRET=未知")
+    @Excel(name = "性别", readConverterKey = "gender")
     private Gender gender;
-    @Excel(name = "手机号", targetAttr = "mobile")
-    @Excel(name = "座机号", targetAttr = "landline")
+    @Excel(name = "手机号")
     private String cellphone;
     private String company;
     private String remarks;
-    private LocalDate birthday;
+    @Excel(name = "创建日期", dateFormat = "yyyy-MM-dd HH:mm:ss", width = 20)
     private LocalDateTime gmtCreate;
     private LocalDateTime gmtUpdated;
     private Integer isDeleted;

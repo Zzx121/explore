@@ -1,7 +1,5 @@
 package cn.edu.djtu.excel.common.annotation;
 
-import org.apache.poi.hssf.usermodel.HSSFFont;
-import org.apache.poi.hssf.util.HSSFColor;
 
 import java.lang.annotation.*;
 
@@ -20,9 +18,14 @@ public @interface Excel {
     String dateFormat() default "";
 
     /**
-     * 读取内容转换表达式(如：0=男,1=女,2=未知)
+     * 读取内容转换表达式(如：0=男,1=女,2=未知)，用于处理固定不变的对应关系
      */
     String readConverterExp() default "";
+    
+    /**
+     * 读取内容转换，用于处理需要实时传递的对应关系
+     */
+    String readConverterKey() default "";
 
     /**
      * 列高度 单位为字符
