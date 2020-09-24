@@ -16,7 +16,7 @@ import org.zalando.problem.spring.web.advice.ProblemHandling;
 public class ExceptionTranslator implements ProblemHandling {
     @ExceptionHandler
     public ResponseEntity<Problem> handlePhoneAlreadyUsedException(PhoneAlreadyUsedException ex, NativeWebRequest request) {
-        String requestURI = ((ServletWebRequest) request).getRequest().getRequestURI();
+        String requestUri = ((ServletWebRequest) request).getRequest().getRequestURI();
         return create(ex, request);
     }
 }

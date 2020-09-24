@@ -4,22 +4,21 @@ import cn.edu.djtu.excel.common.annotation.Excel;
 import cn.edu.djtu.excel.common.annotation.Excels;
 import cn.edu.djtu.excel.common.application.ApplicationUtil;
 import cn.edu.djtu.excel.common.property.ApplicationProperty;
+import cn.edu.djtu.excel.util.basic.DateUtils;
+import cn.edu.djtu.excel.util.basic.Convert;
+import cn.edu.djtu.excel.util.basic.StringUtil;
+import cn.edu.djtu.excel.util.reflect.ReflectUtil;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.poi.hssf.usermodel.HSSFDateUtil;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddressList;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.XSSFDataValidation;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Bean;
-import org.springframework.core.env.Environment;
-import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -28,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * Excel 处理类
@@ -224,10 +224,10 @@ public class ExcelUtil<T> {
                 }
                 //处理表达式对应
             } else if (StringUtils.isNotBlank(exp) && value != null) {
-                cell.setCellValue(convertByExp(String.valueOf(value), exp));
+                cell.setCellValue(convertByExp(String.valueOf(value), exp, false));
                 //处理动态传递过来的对应关系
             } else if (StringUtils.isNotBlank(expKey) && value != null) {
-                cell.setCellValue(convertByExpMap(value, expKey));
+                cell.setCellValue(convertByExpMap(value, expKey, false));
             } else {
                 cell.setCellValue(value == null ? attr.defaultValue() : (value + attr.suffix()));
             }
@@ -239,27 +239,47 @@ public class ExcelUtil<T> {
      *
      * @param propertyValue 参数值
      * @param exp  翻译注解
+     * @param isReverse false时为导出时使用，true时为导入时使用
      * @return 解析后值
      */
-    private String convertByExp(String propertyValue, String exp) {
+    private String convertByExp(String propertyValue, String exp, boolean isReverse) {
         String[] expArr = exp.split(",");
         for (String expItem : expArr) {
             String[] expItemPair = expItem.split("=");
-            if (expItemPair[0].equals(propertyValue)) {
-                return expItemPair[1];
+            if (isReverse) {
+                if (expItemPair[1].equals(propertyValue)) {
+                    return expItemPair[0];
+                }
+            } else {
+                if (expItemPair[0].equals(propertyValue)) {
+                    return expItemPair[1];
+                }
             }
         }
         
         return propertyValue;
     }
-    
-    private String convertByExpMap(Object propertyValue, String expKey) {
+
+    /**
+     * 表达式对应转换
+     * @param propertyValue 属性值
+     * @param expKey expKey
+     * @param isReverse false时为导出时使用，true时为导入时使用
+     * @return 根据expKey返回的对应值
+     */
+    private String convertByExpMap(Object propertyValue, String expKey, boolean isReverse) {
         if (expKeyMap != null) {
             Map<String, Object> expMap = expKeyMap.get(expKey);
             if (expMap != null) {
                 for (Map.Entry<String, Object> expEntry : expMap.entrySet()) {
-                    if (propertyValue.equals(expEntry.getValue())) {
-                        return expEntry.getKey();
+                    if (isReverse) {
+                        if (propertyValue.equals(expEntry.getKey())) {
+                            return String.valueOf(expEntry.getValue());
+                        }
+                    } else {
+                        if (propertyValue.equals(expEntry.getValue())) {
+                            return expEntry.getKey();
+                        }
                     }
                 }
             }
@@ -267,6 +287,8 @@ public class ExcelUtil<T> {
         
         return propertyValue.toString();
     }
+    
+    
     
     private Object acquireValueByFieldGet(Field field, T vo, Excel attr) throws IllegalAccessException, 
             NoSuchMethodException, InvocationTargetException {
@@ -297,14 +319,17 @@ public class ExcelUtil<T> {
         // In case of Entity's inheritance
         tempFieldList.addAll(Arrays.asList(clazz.getSuperclass().getDeclaredFields()));
         tempFieldList.addAll(Arrays.asList(clazz.getDeclaredFields()));
-        
-        tempFieldList.stream().filter(field -> field.isAnnotationPresent(Excel.class))
+        Predicate<Field> isExcelAnnotationPredicate = f -> f.isAnnotationPresent(Excel.class);
+        tempFieldList.stream().filter(isExcelAnnotationPredicate)
         .forEach(f -> addToFields(f, f.getAnnotation(Excel.class)));
-        tempFieldList.stream().filter(field -> field.isAnnotationPresent(Excels.class))
+        tempFieldList.stream().filter(isExcelAnnotationPredicate)
                 .forEach(f -> {
-                    Excel[] excelArr = f.getAnnotation(Excels.class).value();
-                    for (Excel excel : excelArr) {
-                        addToFields(f, excel);
+                    Excels excels = f.getAnnotation(Excels.class);
+                    if (excels != null) {
+                        Excel[] excelArr = excels.value();
+                        for (Excel excel : excelArr) {
+                            addToFields(f, excel);
+                        }
                     }
                 });
     }
@@ -464,7 +489,15 @@ public class ExcelUtil<T> {
         
         return val;
     }
-    
+
+    /**
+     * 从excel文件导入数据
+     * @param sheetName 指定的sheet名称
+     * @param filePath 文件路径
+     * @param headerRowIndex 表头所在行index
+     * @return 从excel文件中解析出来的实体对象列表
+     * @throws IOException exception
+     */
     public List<T> importExcel(String sheetName, String filePath, int headerRowIndex) throws IOException {
         this.type = Excel.Type.IMPORT;
         this.wb = WorkbookFactory.create(new File(filePath));
@@ -488,14 +521,86 @@ public class ExcelUtil<T> {
             List<String> excelHeaderList = new ArrayList<>();
             List<String> annotationHeaderList = parseAnnotationHeaderList();
             for (int i = 0; i < cells; i++) {
-                String cellValue = String.valueOf(getCellValue(headerRow, i));
-                excelHeaderList.add(cellValue);
+                excelHeaderList.add(String.valueOf(getCellValue(headerRow, i)));
+            }
+            //验证导入文件表头未被修改
+            if (!annotationHeaderList.containsAll(excelHeaderList) || !excelHeaderList.containsAll(annotationHeaderList)) {
+                throw new ExcelImportFileCheckException();
             }
             
-            if (!annotationHeaderList.equals(excelHeaderList)) {
+            //按照导入文件表头顺序构建的Field list
+            List<Field> fieldList = new ArrayList<>();
+            excelHeaderList.forEach(s -> this.fields.forEach(m -> m.forEach((k, v) -> {
+                if (s.equals(v.name())) {
+                    fieldList.add(k);
+                }
+            })));
+            
+            //读取sheet内容
+            for (int i = headerRowIndex + 1; i < rows; i++) {
+                Row row = sheet.getRow(i);
+                T entity = null;
+                for (int j = 0; j < fieldList.size(); j++) {
+                    Object cellValue = this.getCellValue(row, j);
+                    Field field = fieldList.get(j);
+                    field.setAccessible(true);
+                    Class<?> type = field.getType();
+                    try {
+                       entity =  entity == null ? clazz.getDeclaredConstructor().newInstance() : entity;
+                    } catch (InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                        e.printStackTrace();
+                    }
+                    // retrieve by type
+                    if (String.class == type) {
+                        cellValue = Convert.toStr(cellValue);
+                    } else if (Integer.class == type || Integer.TYPE == type) {
+                        cellValue = Convert.toInt(cellValue);
+                    } else if (Long.class == type || Long.TYPE == type) {
+                        cellValue = Convert.toLong(cellValue);
+                    } else if (Double.class == type || Double.TYPE == type) {
+                        cellValue = Convert.toDouble(cellValue);
+                    } else if (Float.class == type || Float.TYPE == type) {
+                        cellValue = Convert.toFloat(cellValue);
+                    } else if (BigDecimal.class == type) {
+                        cellValue = Convert.toBigDecimal(cellValue);
+                    } else if (Date.class == type) {
+                        if (cellValue instanceof String) {
+                            cellValue = DateUtils.parseDate(cellValue);
+                        } else if (cellValue instanceof Double) {
+                            cellValue = DateUtil.getJavaDate((Double) cellValue);
+                        }
+                    } 
+                    //TODO 处理LocalDate等
+                    else if (LocalDate.class == type) {
+                    }
+                    
+                    //对应值转换
+                    Excel attr = field.getAnnotation(Excel.class);
+                    String converterExp = attr.readConverterExp();
+                    String converterKey = attr.readConverterKey();
+                    if (StringUtil.isNotEmpty(converterExp)) {
+                        cellValue = convertByExp(String.valueOf(cellValue), converterExp, true);
+                    } else if (StringUtil.isNotEmpty(converterKey)) {
+                        cellValue = convertByExpMap(cellValue, converterKey, true);
+                        //移除后缀
+                    } else {
+                        String suffix = attr.suffix();
+                        if (StringUtil.isNotEmpty(suffix) && StringUtil.isNotEmpty(cellValue)) {
+                            String strVal = Convert.toStr(cellValue);
+                            if (strVal.endsWith(suffix)) {
+                                cellValue = strVal.substring(0, strVal.lastIndexOf(suffix));
+                            }
+                        }
+                    }
+                    ReflectUtil.invokeSetter(entity, field.getName(), cellValue);
+                }
                 
+                list.add(entity);
             }
-            
+            deleteUsedFile(filePath);
+        } else {
+            deleteUsedFile(filePath);
+            throw new ExcelImportFileCheckException();
         }
         
         return list;
@@ -504,13 +609,24 @@ public class ExcelUtil<T> {
     private List<String> parseAnnotationHeaderList() {
         List<String> annotationHeaderList = new ArrayList<>();
         this.fields.forEach(m -> {
-            Set<Map.Entry<Field, Excel>> entries = m.entrySet();
-            for (Map.Entry<Field, Excel> entry : entries) {
-                annotationHeaderList.add(entry.getValue().name());
-            }
+            m.forEach((k, v) -> {
+                annotationHeaderList.add(v.name());
+            });
         });
         
         return annotationHeaderList;
+    }
+
+    /**
+     * 清除使用过的文件，如导入时保存的文件
+     * @param path 文件路径
+     */
+    private void deleteUsedFile(String path) {
+        try {
+            Files.deleteIfExists(Paths.get(path));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 }

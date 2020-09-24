@@ -4,14 +4,17 @@ import cn.edu.djtu.excel.common.exception.ErrorCodeEnum;
 import cn.edu.djtu.excel.entity.Customer;
 import cn.edu.djtu.excel.entity.Gender;
 import cn.edu.djtu.excel.service.ExcelReader;
+import cn.edu.djtu.excel.util.poi.ExcelImportFileCheckException;
+import cn.edu.djtu.excel.util.poi.ExcelUtil;
+import com.google.common.base.MoreObjects;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 
 import javax.swing.text.Style;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -63,6 +66,13 @@ public class ExcelTest {
         System.out.println(stop - start);
         ExecutorService executorService =  Executors.newFixedThreadPool(2);
         
+    }
+    
+    @Test
+    void readExcelTest() throws IOException {
+        ExcelUtil<Customer> excelUtil = new ExcelUtil<>(Customer.class);
+        List<Customer> list = excelUtil.importExcel(null, "customer.xlsx", 0);
+        out.println(list.size());
     }
     
     @Test
@@ -451,7 +461,9 @@ public class ExcelTest {
         BigDecimal a = BigDecimal.valueOf(123);
         BigDecimal b = BigDecimal.valueOf(13);
         out.println(b.multiply(BigDecimal.valueOf(100)).divide(a, 2, RoundingMode.HALF_UP));
-        
+        BigDecimal divide = a.divide(BigDecimal.ZERO, 2, RoundingMode.HALF_UP);
+        out.println(divide);
+
     }
     
     @Test
@@ -467,6 +479,82 @@ public class ExcelTest {
         out.println(ErrorCodeEnum.PHONE_IN_USE.msg());
     }
     
+    @Test
+    void charAtTest() {
+        StringBuilder sb = new StringBuilder("12123(sdfa)/");
+        int lastCharIndex = sb.length() - 1;
+        if (sb.charAt(lastCharIndex) == '/') {
+            sb.deleteCharAt(lastCharIndex);
+        }
+
+        out.println(sb);
+    }
     
+    @Test
+    void streamTest() {
+        List<Integer> integers = Arrays.asList(1, 2, 4, 5, 6, 7, 8, 9);
+        integers.stream().filter(i -> i > 5).forEach(System.out::print);
+        if (integers.size() > 3) {
+            throw new ExcelImportFileCheckException();
+        }
+        out.println("---");
+        integers.stream().filter(i -> i > 2).forEach(System.out::print);
+    }
+    
+    @Test
+    void listTest() {
+        List<Integer> l1 = Arrays.asList(1, 2, 4, 5, 6, 7, 8, 9);
+        List<Integer> l2 = Arrays.asList(1, 4, 2, 8, 6, 7, 5, 9);
+        out.println(l1.containsAll(l2));
+    }
+    
+    @Test
+    void typeTest() {
+        Class<Integer> a = int.class;
+        Class<Integer> b = Integer.TYPE;
+        Class<Integer> c = Integer.class;
+        out.println(System.identityHashCode(a));
+        out.println(System.identityHashCode(b));
+        out.println(System.identityHashCode(c));
+    }
+    
+    @Test
+    void subStringTest() {
+        String s = "abc%";
+        String suffix = "%";
+        String sub = s.substring(0, s.lastIndexOf(suffix));
+        out.println(sub);
+    }
+    
+    @Test
+    void testStringBuilder() {
+        StringBuilder sb = new StringBuilder();
+        out.println(sb.toString().equals(""));
+    }
+    
+    @Test
+    void testMultiValueMap() {
+        MultiValueMap<String, Object> map = new LinkedMultiValueMap<>();
+        map.add("token", 128349);
+        for (int i = 0; i < 8; i++) {
+            map.add("count", i);
+        }
+        out.println(map);
+        Map<String, Object> m = new HashMap<>();
+        m.put("token", 12123);
+        for (int i = 0; i < 10; i++) {
+            m.put("count", i);
+        }
+        out.println(m);
+    }
+    
+    @Test
+    void streamToStringTest() {
+        List<Integer> integers = Arrays.asList(1, 2, 3, 4, 5, 6, 7);
+        String s = integers.stream().map(Objects::toString).collect(Collectors.joining(","));
+        Object[] objects = integers.stream().map(i -> i + "_" + "s").toArray();
+        out.println(s);
+        out.println(Arrays.toString(objects));
+    }
     
 }
