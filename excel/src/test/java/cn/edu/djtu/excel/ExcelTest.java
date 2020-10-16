@@ -7,6 +7,7 @@ import cn.edu.djtu.excel.service.ExcelReader;
 import cn.edu.djtu.excel.util.poi.ExcelImportFileCheckException;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
 import com.google.common.base.MoreObjects;
+import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
@@ -557,4 +558,16 @@ public class ExcelTest {
         out.println(Arrays.toString(objects));
     }
     
+    @Test
+    void testBeanUtils() {
+        List<Customer> customers = produceCustomers(10);
+        customers.forEach(c -> {
+            try {
+                String name = (String) PropertyUtils.getSimpleProperty(c, "name");
+                out.println(name);
+            } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+                e.printStackTrace();
+            }
+        });
+    }
 }
