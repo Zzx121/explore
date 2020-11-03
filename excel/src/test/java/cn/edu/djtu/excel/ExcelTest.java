@@ -6,20 +6,24 @@ import cn.edu.djtu.excel.entity.Gender;
 import cn.edu.djtu.excel.service.ExcelReader;
 import cn.edu.djtu.excel.util.poi.ExcelImportFileCheckException;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
-import com.google.common.base.MoreObjects;
+import com.diffplug.common.base.TreeNode;
+import com.diffplug.common.base.TreeStream;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.http.client.utils.URIBuilder;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
-import javax.swing.text.Style;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -29,6 +33,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static java.lang.System.out;
@@ -570,4 +575,89 @@ public class ExcelTest {
             }
         });
     }
+    
+    @Test
+    void URITest() throws URISyntaxException {
+        URIBuilder builder = new URIBuilder("/usr/local");
+        builder.addParameter("name", "sam");
+        builder.addParameter("pass", "sdk2");
+        String s = builder.toString();
+        out.println(s);
+    }
+    
+    @Test
+    void stringSuffix() {
+        final String REQUIRED_BRACKET = "(*)";
+        String s = "名称(*)";
+        out.println(s.substring(0, s.length() -3));
+    }
+    
+    @Test
+    void continueBreakTest() {
+        for (int i = 0; i < 10; i++) {
+            if (i == 5) {
+                break;
+            }
+            out.println(i);
+        }
+    }
+    
+    @Test
+    void regexTest() {
+//        boolean matches = Pattern.compile("^[a-zA-Z]$").matcher("w@").matches();
+        boolean matches = Pattern.compile("^[\\u4e00-\\u9fa5]+$").matcher("你好").matches();
+        out.println(matches);
+    }
+    
+    @Test
+    void splitTest() {
+        String str = "客服部";
+        String[] split = str.split("/");
+        out.println(split[0]);
+    }
+    
+    @Test
+    void stringBuilderTest() {
+        StringBuilder sb = new StringBuilder("just improve yourself!");
+        sb.setLength(5);
+        out.println(sb.toString());
+    }
+    
+    @Test
+    void treeTest() {
+        
+        String jsonTree = "[{\"organCode\":\"rdyy\",\"pid\":0,\"id\":4541840053501963,\"text\":\"睿丁英语责任有限公司\"},{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4541841739612190,\"text\":\"客服123\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842020630585,\"text\":\"客服一部\"},{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545155256549386,\"text\":\"客服顾问\"},{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545474338226177,\"text\":\"顾问1\"},{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4554507010965513,\"text\":\"A部门\"},{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4561071805562887,\"text\":\"B部门\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842108710977,\"text\":\"客服三部\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4547970842492931,\"text\":\"顾问\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4562153432678415,\"text\":\"顾问1\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4563118630109199,\"text\":\"分组\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118202290181,\"text\":\"我是员工\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118227456011,\"text\":\"订单\"},{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4542202646888453,\"text\":\"财务部1\"}]";
+        
+        Gson gson = new Gson();
+        List<Map<String, Object>> jsonMapList = gson.fromJson(jsonTree, new TypeToken<List<Map<String, Object>>>() {}.getType());
+        List<String> pathList = new ArrayList<>();
+    }
+    
+    @Test
+    void stringSubTest() {
+        String extendPrefix = "extend";
+        String s = "extend2";
+        out.println(s.substring(extendPrefix.length()));
+    }
+    
+    @Test
+    void collectionRemoveTest() {
+        List<Integer> fiveIntegers = Arrays.asList(1, 4, 5);
+        List<Integer> eightIntegers = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8);
+        List<Integer> collect = eightIntegers.stream().filter(i -> !fiveIntegers.contains(i)).collect(Collectors.toList());
+        Integer suffixNum = collect.stream().min(Integer::compare).get();
+        out.println(collect);
+        out.println(suffixNum);
+    }
+    
+    private TreeNode<String> testData = TreeNode.createTestData("root", " A", "  B", "   C", " 1", "  2", "   3", "   a");
+    
+    private void toParentTestCase(String root, String... values) {
+        List<String> actual = TreeStream.toParent(TreeNode.treeDef(), getNode(root)).map(TreeNode::getContent).collect(Collectors.toList());
+    }
+
+    private TreeNode<String> getNode(String name) {
+        return testData.findByContent(name);
+    }
+    
 }

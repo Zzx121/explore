@@ -4,16 +4,17 @@ import cn.edu.djtu.excel.common.exception.PhoneAlreadyUsedException;
 import cn.edu.djtu.excel.entity.Customer;
 import cn.edu.djtu.excel.entity.Gender;
 import cn.edu.djtu.excel.service.ExcelService;
+import cn.edu.djtu.excel.util.basic.StringUtil;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.zalando.problem.AbstractThrowableProblem;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @ClassName ExcelController
@@ -43,6 +44,18 @@ public class ExcelController {
     @PostMapping("/customers")
     public void batchInsertCustomers(@RequestBody List<Customer> customers) {
         excelService.batchInsertCustomers(customers);
+    }
+
+    @ExceptionHandler(AbstractThrowableProblem.class)
+    @ResponseStatus(HttpStatus.OK)
+    ResponseEntity<String> excelExceptionHandler(AbstractThrowableProblem exception) {
+        String title = exception.getTitle();
+        String detail = exception.getDetail();
+        String msg = title;
+        if (StringUtil.isNotEmpty(detail)) {
+            msg += detail;
+        }
+        return ResponseEntity.ok(Objects.requireNonNull(msg));
     }
 
     @PostMapping("/export")
