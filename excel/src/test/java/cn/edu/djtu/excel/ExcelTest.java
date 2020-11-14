@@ -8,6 +8,7 @@ import cn.edu.djtu.excel.util.poi.ExcelImportFileCheckException;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
 import com.diffplug.common.base.TreeNode;
 import com.diffplug.common.base.TreeStream;
+import com.fasterxml.jackson.core.JsonParser;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.beanutils.PropertyUtils;
@@ -611,9 +612,9 @@ public class ExcelTest {
     
     @Test
     void splitTest() {
-        String str = "客服部";
+        String str = "客服部/一部/一分部";
         String[] split = str.split("/");
-        out.println(split[0]);
+        out.println(split[split.length - 1]);
     }
     
     @Test
@@ -626,11 +627,38 @@ public class ExcelTest {
     @Test
     void treeTest() {
         
-        String jsonTree = "[{\"organCode\":\"rdyy\",\"pid\":0,\"id\":4541840053501963,\"text\":\"睿丁英语责任有限公司\"},{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4541841739612190,\"text\":\"客服123\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842020630585,\"text\":\"客服一部\"},{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545155256549386,\"text\":\"客服顾问\"},{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545474338226177,\"text\":\"顾问1\"},{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4554507010965513,\"text\":\"A部门\"},{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4561071805562887,\"text\":\"B部门\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842108710977,\"text\":\"客服三部\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4547970842492931,\"text\":\"顾问\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4562153432678415,\"text\":\"顾问1\"},{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4563118630109199,\"text\":\"分组\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118202290181,\"text\":\"我是员工\"},{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118227456011,\"text\":\"订单\"},{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4542202646888453,\"text\":\"财务部1\"}]";
+        String jsonTree = "[{\"organCode\":\"rdyy\",\"pid\":0,\"id\":4541840053501963,\"text\":\"睿丁英语责任有限公司\"}," +
+                "{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4541841739612190,\"text\":\"客服123\"}," +
+                "{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842020630585,\"text\":\"客服一部\"}," +
+                "{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545155256549386,\"text\":\"客服顾问\"}," +
+                "{\"organCode\":\"\",\"pid\":4541842020630585,\"id\":4545474338226177,\"text\":\"顾问1\"}," +
+                "{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4554507010965513,\"text\":\"A部门\"}," +
+                "{\"organCode\":\"\",\"pid\":4545474338226177,\"id\":4561071805562887,\"text\":\"B部门\"}," +
+                "{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4541842108710977,\"text\":\"客服三部\"}," +
+                "{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4547970842492931,\"text\":\"顾问\"}," +
+                "{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4562153432678415,\"text\":\"顾问1\"}," +
+                "{\"organCode\":\"\",\"pid\":4541842108710977,\"id\":4563118630109199,\"text\":\"分组\"}," +
+                "{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118202290181,\"text\":\"我是员工\"}," +
+                "{\"organCode\":\"\",\"pid\":4541841739612190,\"id\":4563118227456011,\"text\":\"订单\"}," +
+                "{\"organCode\":\"\",\"pid\":4541840053501963,\"id\":4542202646888453,\"text\":\"财务部1\"}]";
         
         Gson gson = new Gson();
-        List<Map<String, Object>> jsonMapList = gson.fromJson(jsonTree, new TypeToken<List<Map<String, Object>>>() {}.getType());
-        List<String> pathList = new ArrayList<>();
+        List<Map<String, Object>> jsonMapList = gson.fromJson(jsonTree, new TypeToken<List<Map<String, Object>>>() {}.
+                getType());
+        Optional<Map<String, Object>> rootOptional = jsonMapList.stream().filter(m -> String.valueOf(m.get("pid")).equals("0.0")).findFirst();
+        TreeNode<Map<String, Object>> rootNode = new TreeNode<>(null, null);
+        if (rootOptional.isPresent()) {
+            rootNode =  new TreeNode<>(null, rootOptional.get());
+            TreeNode<Map<String, Object>> lastNode = rootNode;
+            TreeNode<Map<String, Object>> finalLastNode = lastNode;
+            List<Map<String, Object>> childrenList = jsonMapList.stream().filter(m -> String.valueOf(m.get("pid")).
+                    equals(String.valueOf(finalLastNode.getContent().get("id")))).collect(Collectors.toList());
+            for (Map<String, Object> map : childrenList) {
+                lastNode = new TreeNode<>(lastNode, map);
+            }
+        }
+        out.println(rootNode.getPath());
+
     }
     
     @Test
@@ -650,7 +678,8 @@ public class ExcelTest {
         out.println(suffixNum);
     }
     
-    private TreeNode<String> testData = TreeNode.createTestData("root", " A", "  B", "   C", " 1", "  2", "   3", "   a");
+    private TreeNode<String> testData = TreeNode.createTestData("root", " A", "  B", "   C", 
+            " 1", "  2", "   3", "   a");
     
     private void toParentTestCase(String root, String... values) {
         List<String> actual = TreeStream.toParent(TreeNode.treeDef(), getNode(root)).map(TreeNode::getContent).collect(Collectors.toList());
