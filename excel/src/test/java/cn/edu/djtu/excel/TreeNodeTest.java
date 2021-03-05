@@ -1,9 +1,11 @@
 package cn.edu.djtu.excel;
 
+import cn.edu.djtu.excel.entity.Customer;
 import com.diffplug.common.base.TreeNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -111,4 +113,10 @@ public class TreeNodeTest {
         sb.setLength(len);
     }
     
+    @Test
+    void emptyListTest() {
+        List<Object> l = Collections.emptyList();
+        l.add(2);
+        System.out.println(l);
+    }
 }

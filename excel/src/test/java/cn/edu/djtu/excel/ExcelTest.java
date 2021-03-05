@@ -7,11 +7,15 @@ import cn.edu.djtu.excel.service.ExcelReader;
 import cn.edu.djtu.excel.util.poi.ExcelImportFileCheckException;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
 import com.diffplug.common.base.TreeNode;
+import com.diffplug.common.base.TreeQuery;
 import com.diffplug.common.base.TreeStream;
-import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.base.MoreObjects;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.beanutils.PropertyUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -661,6 +665,127 @@ public class ExcelTest {
 
     }
     
+    private List<FlatTreeNode> generateNodes() {
+        List<FlatTreeNode> nodes = new ArrayList<>();
+        FlatTreeNode treeNode = FlatTreeNode.builder().content(generateRandomWord(4)).id(1L).parentId(0L).build();
+        nodes.add(treeNode);
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(5)).id(2L).parentId(1L).build();
+        nodes.add(treeNode);
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(6)).id(3L).parentId(1L).build();
+        nodes.add(treeNode);
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(2)).id(4L).parentId(2L).build();
+        nodes.add(treeNode);
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(3)).id(5L).parentId(2L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(9)).id(6L).parentId(3L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(5)).id(7L).parentId(3L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(7)).id(8L).parentId(4L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(6)).id(9L).parentId(5L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(4)).id(10L).parentId(7L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(8)).id(11L).parentId(8L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(6)).id(12L).parentId(10L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(5)).id(13L).parentId(10L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(1)).id(14L).parentId(12L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(7)).id(15L).parentId(13L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(9)).id(16L).parentId(13L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(8)).id(17L).parentId(15L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(12)).id(18L).parentId(16L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(10)).id(19L).parentId(16L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(9)).id(20L).parentId(16L).build();
+        nodes.add(treeNode);
+
+        treeNode = FlatTreeNode.builder().content(generateRandomWord(8)).id(21L).parentId(16L).build();
+        nodes.add(treeNode);
+        
+        return nodes;
+    }
+    
+    private FlatTreeNode getParentNode(List<FlatTreeNode> nodes) {
+        return nodes.stream().filter(n -> n.getParentId() == null || n.getParentId().equals(0L)).findFirst().orElseThrow();
+    }
+    
+    @Test
+    void customerTreeTest() {
+        List<FlatTreeNode> nodes = generateNodes();
+        FlatTreeNode rootNode = getParentNode(nodes);
+        TreeNode<FlatTreeNode> treeNode = new TreeNode<>(null, rootNode);
+        
+        helper(nodes, treeNode, rootNode);
+        
+        out.println(treeNode.getChildren().get(0).getChildren().get(0).getPath(a -> String.valueOf(a.getId())));
+    }
+    
+    @Test
+    void multiValueMapTest() {
+        List<FlatTreeNode> nodes = generateNodes();
+        MultiValueMap<String, FlatTreeNode> attrMap = new LinkedMultiValueMap<>();
+        attrMap.put("nodes", nodes);
+        out.println(attrMap);
+    }
+    
+    private void helper(List<FlatTreeNode> nodes, TreeNode<FlatTreeNode> finalNode, FlatTreeNode parentNode) {
+        List<FlatTreeNode> childrenNodes = getChildrenNodes(nodes, parentNode);
+        if (childrenNodes.size() > 0) {
+            for (FlatTreeNode childrenNode : childrenNodes) {
+                helper(nodes, new TreeNode<>(finalNode, childrenNode), childrenNode);
+            }
+        }
+    }
+    
+    private List<FlatTreeNode> getChildrenNodes(List<FlatTreeNode> nodes, FlatTreeNode parentNode) {
+        return nodes.stream().filter(n -> parentNode.getId().equals(n.getParentId())).collect(Collectors.toList());
+    }
+    
+    @Test
+    void streamCollectionTest() {
+        List<Integer> integers = Arrays.asList(1, 2, 3, 4, 5);
+        List<Integer> collect = integers.stream().filter(i -> i > 6).collect(Collectors.toList());
+        out.println(collect.size());
+    }
+    
+    private String generateRandomWord(int length) {
+        final String letterPool = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        int len = letterPool.length();
+        Random r = new Random();
+        
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int j = 0; j < length; j++) {
+            int i = r.nextInt(len - 1);
+            stringBuilder.append(letterPool.charAt(i));
+        }
+        
+        return stringBuilder.toString();
+    }
+    
     @Test
     void stringSubTest() {
         String extendPrefix = "extend";
@@ -681,12 +806,104 @@ public class ExcelTest {
     private TreeNode<String> testData = TreeNode.createTestData("root", " A", "  B", "   C", 
             " 1", "  2", "   3", "   a");
     
-    private void toParentTestCase(String root, String... values) {
-        List<String> actual = TreeStream.toParent(TreeNode.treeDef(), getNode(root)).map(TreeNode::getContent).collect(Collectors.toList());
-    }
-
     private TreeNode<String> getNode(String name) {
         return testData.findByContent(name);
     }
     
+    @Test
+    void trimTest() {
+        String s = " 天 津 天  津";
+        out.println(s.replaceAll("\\s+", ""));
+    }
+    
+    @Test
+    void testMoreObjects() {
+        out.println(MoreObjects.firstNonNull("SAM", "Hello"));
+        out.println(MoreObjects.firstNonNull(null, "Hello"));
+    }
+    
+    
+    @Test
+    void listIterateAndSet() {
+        List<FlatTreeNode> nodes = generateNodes();
+        out.println(nodes.size());
+        FlatTreeNode rootNode = nodes.get(0);
+        rootNode.setPath(String.valueOf(rootNode.getId()));
+        rootNode.setNamePath(rootNode.getContent());
+        nodes.forEach(n -> {
+            Long id = n.getId();
+            List<FlatTreeNode> childrenList = nodes.stream().filter(c -> c.getParentId().equals(id)).collect(Collectors.toList());
+            if (childrenList.size() > 0) {
+                childrenList.forEach(c -> {
+                    c.setPath(n.getPath() + "/" + c.getId());
+                    c.setNamePath(n.getNamePath() + "/" + c.getContent());
+                });
+            }
+        });
+
+        out.println(nodes);
+    }
+    
+    @Test
+    void subListTest() {
+        List<Integer> integers = Arrays.asList(1, 2, 3, 4, 5, 6);
+        List<String> paths = new ArrayList<>();
+        for (int i = 2; i <= integers.size(); i++) {
+            paths.add(integers.subList(0, i).stream().map(Objects::toString).collect(Collectors.joining("/")));
+        }
+        out.println(integers.subList(0, integers.size() - 1).stream().map(Objects::toString).collect(Collectors.joining("/")));
+        out.println(paths);
+    }
+    
+    @Test
+    void randomTest() {
+        Random random = new Random();
+        out.println("B" + random.nextInt(4));
+//        for (int i = 0; i < 10; i++) {
+//            out.println("a" + random.nextInt(i));
+//        }
+    }
+
+    /**
+     This is a guidebook to the many different styles of meditation, the various benefits of each practice, 
+     plus free guided audio practices that help you learn how to meditate.
+
+     How do you learn to meditate? In mindfulness meditation, 
+     we’re learning how to pay attention to the breath as it goes in and out, 
+     and notice when the mind wanders from this task.
+     This practice of returning to the breath builds the muscles of attention and mindfulness.
+
+     When we pay attention to our breath, we are learning how to return to, and remain in, 
+     the present moment—to anchor ourselves in the here and now on purpose, without judgment.
+
+     In mindfulness practice, we are learning how to return to, and remain in, 
+     the present moment—to anchor ourselves in the here and now on purpose, without judgment.
+
+     The idea behind mindfulness seems simple—the practice takes patience. 
+     Indeed, renowned meditation teacher Sharon Salzberg recounts that her first experience with 
+     meditation showed her how quickly the mind gets caught up in other tasks. “I thought, okay, what will it be,
+     like, 800 breaths before my mind starts to wander? And to my absolute amazement, it was one breath, and I’d be gone,” says Salzberg.
+
+     While meditation isn’t a cure-all, it can certainly provide some much-needed space in your life. Sometimes, 
+     that’s all we need to make better choices for ourselves, our families, and our communities. 
+     And the most important tools you can bring with you to your meditation practice are a little patience, 
+     some kindness for yourself, and a comfortable place to sit.
+
+     A Basic Meditation for Beginners
+     The first thing to clarify: What we’re doing here is aiming for mindfulness, 
+     not some process that magically wipes your mind clear of the countless and endless thoughts 
+     that erupt and ping constantly in our brains. We’re just practicing bringing our attention to our 
+     breath, and then back to the breath when we notice our attention has wandered.
+
+     Get comfortable and prepare to sit still for a few minutes. After you stop reading this, you’re going to simply focus on your own natural inhaling and exhaling of breath.
+     Focus on your breath. Where do you feel your breath most? In your belly? In your nose? Try to keep your attention on your inhale and exhale.
+     Follow your breath for two minutes. Take a deep inhale, expanding your belly, and then exhale slowly, elongating the out-breath as your belly contracts.
+     Welcome back. What happened? How long was it before your mind wandered away from your breath? Did you notice how busy your mind was even without consciously directing it to think about anything in particular? Did you notice yourself getting caught up in thoughts before you came back to reading this? We often have little narratives running in our minds that we didn’t choose to put there, like: “Why DOES my boss want to meet with me tomorrow?” “I should have gone to the gym yesterday.” “I’ve got to pay some bills” or (the classic) “I don’t have time to sit still, I’ve got stuff to do.”
+
+     We “practice” mindfulness so we can learn how to recognize when our minds are doing their normal everyday acrobatics, and maybe take a pause from that for just a little while so we can choose what we’d like to focus on.
+
+     If you experienced these sorts of distractions (and we all do), you’ve made an important discovery: simply put, that’s the opposite of mindfulness. It’s when we live in our heads, on automatic pilot, letting our thoughts go here and there, exploring, say, the future or the past, and essentially, not being present in the moment. But that’s where most of us live most of the time—and pretty uncomfortably, if we’re being honest, right? But it doesn’t have to be that way.
+
+     We “practice” mindfulness so we can learn how to recognize when our minds are doing their normal everyday acrobatics, and maybe take a pause from that for just a little while so we can choose what we’d like to focus on. In a nutshell, meditation helps us have a much healthier relationship with ourselves (and, by extension, with others).
+     */
 }

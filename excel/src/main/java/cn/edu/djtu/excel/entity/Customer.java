@@ -1,8 +1,7 @@
 package cn.edu.djtu.excel.entity;
 
 import cn.edu.djtu.excel.common.annotation.Excel;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -16,6 +15,9 @@ import java.time.LocalDateTime;
  **/
 @Getter
 @Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class Customer implements Serializable {
     private Integer id;
     @Excel(name = "姓名", width = 12)
