@@ -1,5 +1,7 @@
 package cn.edu.djtu.excel.thread.cancellation;
 
+import org.springframework.scheduling.annotation.Scheduled;
+
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -64,6 +66,7 @@ public class ControlSubThread implements Runnable {
         stopped.set(true);
     }
 
+    @Scheduled(cron = "")
     public static void main(String[] args) throws InterruptedException, ExecutionException {
         ControlSubThread controlSubThread = new ControlSubThread(10000);
 //        controlSubThread.start();

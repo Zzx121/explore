@@ -246,23 +246,26 @@ public class ConcurrencyTest {
     
     @Test
     void getQRCodeTest() {
+        String accessToken = "44_-Uv0s-qkoBkJEMgAz5tgimj2Fpz2zoMP8VQBrXiDooYNLWJ8RR2gZlYHd7TIFNvgoyVQv5l7u-0vUKLuq9rNAs_dsE4hxgJoQlV5BVeFzQ_fWARSzpApd-rvOk1uqDhdK4etbqBLbiaoHiZ_WMSaACAQGM";
         try(CloseableHttpClient client = HttpClientBuilder.create().build()) {
             HttpPost httpPost = new HttpPost("https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=" +
-                    "43_gnDgI3_VDC7cT7IIHBVG1yliF_YZI8KVps_vX57VH5nXfvNemaW5ElFxzgzz22qK8MnUGGEf57WNAVFVkJd8l3XvJUaugxvpWzoZDDX55joYbJW6lXeguxsYC4KNOM7-iIogWJVBXDzLFP1NNSMcACATYS");
+                    accessToken);
             
             httpPost.setEntity(new StringEntity("{" +
-                    " \"scene\":\"7c5ec298fa644373823e6f820157d745\"," +
+                    " \"scene\":\"46240196096164064541840053501994\"," +
                     " \"width\":230," +
-                    " \"page\": \"pages/index/index\"" +
+                    " \"page\": \"pages/form/form\"" +
                     "}", ContentType.APPLICATION_JSON));
 
             try(CloseableHttpResponse httpResponse = client.execute(httpPost)) {
                 HttpEntity entity = httpResponse.getEntity();
-                if (entity != null) {
+                if (entity != null && entity.getContentType().getValue().equals("image/jpeg")) {
                     Path path = Paths.get("/tmp/images", "/qrcode");
                     Files.createDirectories(path);
                     Files.copy(entity.getContent(), path.resolve("qr01.jpeg"), StandardCopyOption.REPLACE_EXISTING);
                     System.out.println(path.toFile());
+                } else {
+                    System.out.println("获取二维码失败");
                 }
                 EntityUtils.consume(entity);
             }
