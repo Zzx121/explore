@@ -21,8 +21,12 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
     @Bean
     public LettuceConnectionFactory connectionFactory() {
-//        return new LettuceConnectionFactory(new RedisStandaloneConfiguration("localhost", 6379));
-        return new LettuceConnectionFactory(new RedisStandaloneConfiguration("192.168.1.40", 6379));
+        return new LettuceConnectionFactory(new RedisStandaloneConfiguration("localhost", 6379));
+//        return new LettuceConnectionFactory(new RedisStandaloneConfiguration("192.168.1.40", 6379));
+//        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration("redis-12363.c261.us-east-1-4.ec2.cloud.redislabs.com",
+//                12363);
+//        redisStandaloneConfiguration.setPassword("qVlek4X1mlElDQufr5QRPQQNpSc9Qi7H");
+//        return new LettuceConnectionFactory(redisStandaloneConfiguration);
     }
     
     @Bean
