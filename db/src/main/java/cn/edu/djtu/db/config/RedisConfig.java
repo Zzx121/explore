@@ -10,6 +10,11 @@ import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import javax.sql.DataSource;
+import java.sql.SQLException;
 
 /**
  * @ClassName RedisConfig
@@ -41,5 +46,10 @@ public class RedisConfig {
         template.setValueSerializer(jdkSerializationRedisSerializer);
         
         return template;
+    }
+
+    @Bean
+    public PlatformTransactionManager transactionManager(DataSource dataSource) throws SQLException {
+        return new DataSourceTransactionManager(dataSource);
     }
 }

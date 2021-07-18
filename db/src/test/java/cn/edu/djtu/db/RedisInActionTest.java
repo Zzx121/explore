@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -24,7 +27,7 @@ public class RedisInActionTest {
     String marketKey = "market:";
     String inventoryKey = "inventory:" + sellerId;
     String itemKey = itemId + "." + sellerId;
-    double price = 134.2;
+    double price = 234.2;
     AtomicBoolean executed = new AtomicBoolean(false);
     AtomicBoolean purchaseExecuted = new AtomicBoolean(false);
     //模拟其中一个线程改变值，看是否抛出异常
@@ -105,6 +108,8 @@ public class RedisInActionTest {
 //        transactionalAndPipelinedListItem();
     }
 
+
+    RedisSerializer<String> stringRedisSerializer = new StringRedisSerializer();    
     String usersKey = "users:";
     String sellerKey = usersKey + 10;
     String buyerKey = usersKey + 12;
@@ -115,17 +120,17 @@ public class RedisInActionTest {
     void initUsers() {
         HashOperations<String, Object, Object> hashOperations = redisTemplate.opsForHash();
         HashOperations<String, Object, Object> stringObjectObjectHashOperations = stringRedisTemplate.opsForHash();
-//        hashOperations.put(sellerKey, nameKey, "SAM");
-//        hashOperations.put(sellerKey, balanceKey, 2000.00);
+        hashOperations.put(sellerKey, nameKey, "SAM");
+        hashOperations.put(sellerKey, balanceKey, 2000.00);
+
+        hashOperations.put(buyerKey, nameKey, "SMITH");
+        hashOperations.put(buyerKey, balanceKey, 495.00);
+
+//        stringObjectObjectHashOperations.put(sellerKey, nameKey, "SAM");
+//        stringObjectObjectHashOperations.put(sellerKey, balanceKey, "2000.00");
 //
-//        hashOperations.put(buyerKey, nameKey, "SMITH");
-//        hashOperations.put(buyerKey, balanceKey, 495.00);
-
-        stringObjectObjectHashOperations.put(sellerKey, nameKey, "SAM");
-        stringObjectObjectHashOperations.put(sellerKey, balanceKey, "2000.00");
-
-        stringObjectObjectHashOperations.put(buyerKey, nameKey, "SMITH");
-        stringObjectObjectHashOperations.put(buyerKey, balanceKey, "495.00");
+//        stringObjectObjectHashOperations.put(buyerKey, nameKey, "SMITH");
+//        stringObjectObjectHashOperations.put(buyerKey, balanceKey, "495.00");
         redisTemplate.opsForZSet().add(marketKey, itemKey, price);
 //        redisTemplate.opsForHash().increment(sellerKey, balanceKey, 2000.30);
 //        redisTemplate.opsForHash().increment(buyerKey, balanceKey, 500.43);
@@ -140,6 +145,7 @@ public class RedisInActionTest {
     }
 
     @Test
+    @Transactional
     void purchaseItem() {
         // user buy things from market
         // need to ensure item exists and user's balance is sufficient
@@ -157,6 +163,7 @@ public class RedisInActionTest {
                     }
                     operations.watch(Arrays.asList(marketKey, buyerKey));
                     if (operations.opsForZSet().rank(marketKey, itemKey) > -1) {
+//                        double balance = Double.valueOf(String.valueOf(operations.opsForHash().get(buyerKey, balanceKey)));
                         double balance = (double) operations.opsForHash().get(buyerKey, balanceKey);
                         Double price = operations.opsForZSet().score(marketKey, itemKey);
                         if (balance < price) {
@@ -170,14 +177,14 @@ public class RedisInActionTest {
                             operations.opsForSet().add("inventory:12", itemKey);
                             operations.opsForHash().increment(sellerKey, balanceKey, price);
                             operations.opsForHash().increment(buyerKey, balanceKey, -price);
+                            operations.exec();
+                            purchaseExecuted.set(true);
+                            operations.unwatch();
                         } catch (Exception e) {
                             e.printStackTrace();
                             operations.discard();
                             operations.unwatch();
                         }
-                        operations.exec();
-                        purchaseExecuted.set(true);
-                        operations.unwatch();
                         
                     }
                     purchaseExecuted.set(true);
@@ -186,7 +193,12 @@ public class RedisInActionTest {
             }
             
         };
+       
+//        redisTemplate.setHashKeySerializer(stringRedisSerializer);
+//        redisTemplate.setHashValueSerializer(stringRedisSerializer);
+        redisTemplate.setEnableTransactionSupport(true);
         redisTemplate.execute(sessionCallback);
+        
 //        List<Callable<Object>> tasks = new ArrayList<>();
 //        tasks.add(Executors.callable(() -> {
 //            redisTemplate.execute(sessionCallback);
