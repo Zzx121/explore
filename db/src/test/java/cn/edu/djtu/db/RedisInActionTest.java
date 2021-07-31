@@ -161,29 +161,29 @@ public class RedisInActionTest {
                         purchaseExecuted.set(true);
                         break;
                     }
-                    operations.watch(Arrays.asList(marketKey, buyerKey));
+//                    operations.watch(Arrays.asList(marketKey, buyerKey));
                     if (operations.opsForZSet().rank(marketKey, itemKey) > -1) {
 //                        double balance = Double.valueOf(String.valueOf(operations.opsForHash().get(buyerKey, balanceKey)));
                         double balance = (double) operations.opsForHash().get(buyerKey, balanceKey);
                         Double price = operations.opsForZSet().score(marketKey, itemKey);
                         if (balance < price) {
                             purchaseExecuted.set(true);
-                            operations.unwatch();   
+//                            operations.unwatch();   
                             break;
                         }
                         try {
-                            operations.multi();
+//                            operations.multi();
                             operations.opsForZSet().remove(marketKey, itemKey);
                             operations.opsForSet().add("inventory:12", itemKey);
                             operations.opsForHash().increment(sellerKey, balanceKey, price);
                             operations.opsForHash().increment(buyerKey, balanceKey, -price);
-                            operations.exec();
+//                            operations.exec();
                             purchaseExecuted.set(true);
-                            operations.unwatch();
+//                            operations.unwatch();
                         } catch (Exception e) {
                             e.printStackTrace();
-                            operations.discard();
-                            operations.unwatch();
+//                            operations.discard();
+//                            operations.unwatch();
                         }
                         
                     }
@@ -216,6 +216,42 @@ public class RedisInActionTest {
 //        //junit 会在执行完当前的代码块就退出主线程，Spring的上下文环境也会关闭，需要让程序等待子线程执行完毕再关闭
 //        executor.invokeAll(tasks);
 
+    }
+    
+    @Test
+    @Transactional
+    void purchaseItemTransactionalWithoutSessionCallback() {
+        redisTemplate.setEnableTransactionSupport(true);
+        HashOperations<String, Object, Object> hashOperations = redisTemplate.opsForHash();
+        SetOperations<String, Object> setOperations = redisTemplate.opsForSet();
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        long end = System.currentTimeMillis() + 5000;
+        //在一定时间内不断重试，超时或者执行完成则结束；
+        while (!purchaseExecuted.get()) {
+            if (System.currentTimeMillis() >= end) {
+                purchaseExecuted.set(true);
+                break;
+            }
+            if (zSetOperations.rank(marketKey, itemKey) > -1) {
+                double balance = (double) hashOperations.get(buyerKey, balanceKey);
+                Double price = zSetOperations.score(marketKey, itemKey);
+                if (balance < price) {
+                    purchaseExecuted.set(true);
+                    break;
+                }
+                try {
+                    zSetOperations.remove(marketKey, itemKey);
+                    setOperations.add("inventory:12", itemKey);
+                    hashOperations.increment(sellerKey, balanceKey, price);
+                    hashOperations.increment(buyerKey, balanceKey, -price);
+                    purchaseExecuted.set(true);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+            }
+            purchaseExecuted.set(true);
+        }
     }
 
     private void transactionalAndPipelinedListItem() {
@@ -293,5 +329,6 @@ public class RedisInActionTest {
         System.out.println("【is member】 " + opsForSet.isMember(inventoryKey, itemId));
 //        System.out.println("【deleted count】 " + opsForSet.remove("inventory:27", "itemA"));
     }
+    
 
 }
