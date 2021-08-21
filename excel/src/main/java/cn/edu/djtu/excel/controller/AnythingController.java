@@ -1,23 +1,13 @@
 package cn.edu.djtu.excel.controller;
 
 import cn.edu.djtu.excel.common.exception.PhoneAlreadyUsedException;
-import cn.edu.djtu.excel.entity.Customer;
-import cn.edu.djtu.excel.entity.Gender;
-import cn.edu.djtu.excel.service.ExcelService;
 import cn.edu.djtu.excel.util.basic.RequestUtil;
-import cn.edu.djtu.excel.util.basic.StringUtil;
-import cn.edu.djtu.excel.util.poi.ExcelUtil;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.java.Log;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.zalando.problem.AbstractThrowableProblem;
 
 import javax.servlet.http.HttpServletRequest;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.*;
 
 /**
  * @author zzx
@@ -28,10 +18,34 @@ import java.util.*;
 @RequestMapping("/anything")
 public class AnythingController {
     
-    @GetMapping("/tokenFilter")
-    public void tokenFilter(HttpServletRequest request) {
+    @PostMapping("/tokenFilter")
+    public void tokenFilterPost(HttpServletRequest request, @RequestParam String token) {
         log.info("json body third time: " + RequestUtil.getRequestParamValue(request, "token"));
+//        throw new PhoneAlreadyUsedException();
+    }
+    
+    @PostMapping("/tokenFilterJson")
+    public void tokenFilterPostJson(HttpServletRequest request, @RequestBody TokenEntity entity) {
+        log.info("json body third time: " + RequestUtil.getRequestParamValue(request, "token"));
+//        throw new PhoneAlreadyUsedException();
+    }
+    
+    @GetMapping("/tokenFilter")
+    public void tokenFilterGet(HttpServletRequest request, @RequestParam String token) {
+//        log.info("json body third time: " + RequestUtil.getRequestParamValue(request, "token"));
         throw new PhoneAlreadyUsedException();
+    }
+    
+    @GetMapping(value = "/transactionalInternalInvoke")
+    public void transactionalInternalInvoke() {
+        
+    }
+
+    @Getter
+    @Setter
+    private static class TokenEntity {
+        private String token;
+        private Long id;
     }
     
 }

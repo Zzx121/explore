@@ -16,7 +16,7 @@ import javax.servlet.http.HttpServletResponse;
 public class TokenHandlerInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        log.info("parameter first time: " + request.getParameter("token"));
+//        log.info("parameter first time: " + request.getParameter("token"));
         log.info("json body second time: " + RequestUtil.getRequestParamValue(request, "token"));
         return HandlerInterceptor.super.preHandle(request, response, handler);
     }

@@ -1,10 +1,13 @@
 package cn.edu.djtu.excel.util.basic;
 
+import com.google.common.base.Splitter;
+import com.google.common.io.CharStreams;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 
 import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
@@ -41,18 +44,33 @@ public class RequestUtil {
         String[] paramArr = request.getParameterValues(paramKey);
         if (paramArr != null && paramArr.length > 0) {
             String paramValue = paramArr[0];
-            if (StringUtil.isNotEmpty(paramValue))
+            if (StringUtil.isNotEmpty(paramValue)) {
                 return paramValue;
+            }
         }
 
-        // body payload(json)
+        // body payload
         try {
-            Map<String, String> bodyMap = new Gson().fromJson(request.getReader(), new TypeToken<Map<String, String>>() {
-            }.getType());
-            if (bodyMap != null && bodyMap.size() > 0) {
-                String paramValue = bodyMap.get(paramKey);
-                if (StringUtil.isNotEmpty(paramValue))
-                    return paramValue;
+            String contentType = request.getContentType();
+            if (contentType.contains(MediaType.APPLICATION_FORM_URLENCODED_VALUE)) {
+                String bodyStr = CharStreams.toString(request.getReader());
+                if (StringUtils.isNotEmpty(bodyStr)) {
+                    String paramValue = Splitter.on('&').trimResults().withKeyValueSeparator('=').split(bodyStr).get(paramKey);
+                    if (StringUtil.isNotEmpty(paramValue)) {
+                        return paramValue;
+                    }
+                } else {
+                    return null;
+                }
+            } else if (contentType.contains(MediaType.APPLICATION_JSON_VALUE)) {
+                Map<String, String> bodyMap = new Gson().fromJson(request.getReader(), new TypeToken<Map<String, String>>() {
+                }.getType());
+                if (bodyMap != null && bodyMap.size() > 0) {
+                    String paramValue = bodyMap.get(paramKey);
+                    if (StringUtil.isNotEmpty(paramValue)) {
+                        return paramValue;
+                    }
+                }
             }
         } catch (IOException e) {
             logger.error("解析body payload失败", e);
