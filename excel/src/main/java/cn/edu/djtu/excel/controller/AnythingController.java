@@ -8,6 +8,10 @@ import lombok.extern.java.Log;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Supplier;
 
 /**
  * @author zzx
@@ -46,6 +50,54 @@ public class AnythingController {
     private static class TokenEntity {
         private String token;
         private Long id;
+    }
+
+    @GetMapping("/singletonCache")
+    public Object singletonCache(String key) {
+//        return SingletonCache.getInstance().getCache(key);
+        return SingletonCache.getInstance().getCache(key, UUID::randomUUID);
+    }
+
+    private static class SingletonCache {
+        private static volatile SingletonCache singletonCache;
+        private ConcurrentMap<String, Object> cache;
+        private SingletonCache() {}
+
+        public static SingletonCache getInstance() {
+            if (singletonCache == null) {
+                synchronized (SingletonCache.class) {
+                    if (singletonCache == null) {
+                        singletonCache = new SingletonCache();
+                    }
+                }
+            }
+
+            return singletonCache;
+        }
+
+        {
+            cache = new ConcurrentHashMap<>();
+        }
+
+        public Object getCache(String key) {
+            Object result = cache.get(key);
+            if (result == null) {
+                result = UUID.randomUUID();
+                cache.put(key, result);
+            }
+            return result;
+        }
+
+        public Object getCache(String key, Supplier<Object> supplier) {
+            Object result = cache.get(key);
+            if (result == null) {
+                result = supplier.get();
+                cache.put(key, result);
+            }
+            return result;
+        }
+
+
     }
     
 }
