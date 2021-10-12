@@ -9,9 +9,9 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,7 +35,7 @@ public class RedisInActionTest {
             new ArrayBlockingQueue<>(5));
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
-    
+
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
@@ -80,7 +80,7 @@ public class RedisInActionTest {
                 return null;
             }
         };
-        
+
 //        new Thread(this::transactionalAndPipelinedListItem).start();
 //        new Thread(this::transactionalAndPipelinedListItem).start();
         List<Callable<Object>> tasks = new ArrayList<>();
@@ -109,7 +109,7 @@ public class RedisInActionTest {
     }
 
 
-    RedisSerializer<String> stringRedisSerializer = new StringRedisSerializer();    
+    RedisSerializer<String> stringRedisSerializer = new StringRedisSerializer();
     String usersKey = "users:";
     String sellerKey = usersKey + 10;
     String buyerKey = usersKey + 12;
@@ -136,8 +136,8 @@ public class RedisInActionTest {
 //        redisTemplate.opsForHash().increment(buyerKey, balanceKey, 500.43);
 //        hashOperations.put("users:2", balanceKey, 394.8);
         System.out.println(hashOperations.get(sellerKey, balanceKey));
-        System.out.println(hashOperations.get(buyerKey, balanceKey));   
-        
+        System.out.println(hashOperations.get(buyerKey, balanceKey));
+
         System.out.println(stringObjectObjectHashOperations.get(sellerKey, balanceKey));
         System.out.println(stringObjectObjectHashOperations.get(buyerKey, balanceKey));
         System.out.println(redisTemplate.opsForZSet().rank(marketKey, itemKey));
@@ -185,20 +185,20 @@ public class RedisInActionTest {
 //                            operations.discard();
 //                            operations.unwatch();
                         }
-                        
+
                     }
                     purchaseExecuted.set(true);
                 }
                 return null;
             }
-            
+
         };
-       
+
 //        redisTemplate.setHashKeySerializer(stringRedisSerializer);
 //        redisTemplate.setHashValueSerializer(stringRedisSerializer);
         redisTemplate.setEnableTransactionSupport(true);
         redisTemplate.execute(sessionCallback);
-        
+
 //        List<Callable<Object>> tasks = new ArrayList<>();
 //        tasks.add(Executors.callable(() -> {
 //            redisTemplate.execute(sessionCallback);
@@ -217,7 +217,7 @@ public class RedisInActionTest {
 //        executor.invokeAll(tasks);
 
     }
-    
+
     @Test
     @Transactional
     void purchaseItemTransactionalWithoutSessionCallback() {
@@ -329,6 +329,58 @@ public class RedisInActionTest {
         System.out.println("【is member】 " + opsForSet.isMember(inventoryKey, itemId));
 //        System.out.println("【deleted count】 " + opsForSet.remove("inventory:27", "itemA"));
     }
+
+    @Test
+    void setNXTest() {
+        String uuid = UUID.randomUUID().toString();
+        Boolean lockA = stringRedisTemplate.opsForValue().setIfAbsent("lockA", uuid, 10, TimeUnit.SECONDS);
+        System.out.println(lockA);
+        System.out.println(uuid);
+    }
+
+    private Map<String, String> acquireLock(String lockName, long timeout) {
+        // avoid the situation of release lock of others
+        String identifier = UUID.randomUUID().toString();
+        lockName = "lock_" + lockName;
+        long end = System.currentTimeMillis() + timeout;
+        Boolean acquired = null;
     
+        // retry for some time
+        while (System.currentTimeMillis() < end) {
+            acquired = stringRedisTemplate.opsForValue().setIfAbsent(lockName, identifier, 2, TimeUnit.HOURS);
+            if (acquired != null && acquired) {
+                return Map.of("lockName", lockName, "identifier", identifier);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The WATCH is optimistic lock and in heavy load this will lead to high reties and latency(contention),
+     * just use the normal lock will reduce retries and achieve low latency especially in heavy load, but be aware of 
+     * deadlocks when partly locked.
+     */
+    @Test
+    void acquireAndReleaseLockTest() {
+        Map<String, String> lockA = acquireLock("lockC", 1000);
+        System.out.println(lockA);
+    }
+    
+    private boolean releaseLock(String lockName, String identifier) {
+        // can be change to normal lock, this may also lead to many retries
+        stringRedisTemplate.watch(lockName);
+        ValueOperations<String, String> stringStringValueOperations = stringRedisTemplate.opsForValue();
+        String lockValue = stringStringValueOperations.get(lockName);
+        // The CAS here is not atomic, can change to lua script
+        if (identifier.equals(lockValue)) {
+            stringRedisTemplate.multi();
+            stringRedisTemplate.delete(lockName);
+            stringRedisTemplate.exec();
+            return true;
+        } else {
+            return false;
+        }
+    }
 
 }
