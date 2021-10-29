@@ -3,18 +3,19 @@ package cn.edu.djtu.db;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.connection.RedisZSetCommands;
 import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 /**
  * @author zzx
@@ -382,5 +383,261 @@ public class RedisInActionTest {
             return false;
         }
     }
+
+    String semaphoreKey = "COUNTING_SEMAPHORE";
+
+    @Transactional
+    public String acquireSemaphore(int permits, long timeout) {
+        String member = String.valueOf(UUID.randomUUID());
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        long timeoutMills = System.currentTimeMillis() - timeout;
+        //clear timed out items
+        zSetOperations.removeRangeByScore(semaphoreKey, 0, timeoutMills);
+        //check rank, if larger than permits, block and remove
+        // The clock consistency problem also exists, in multiple system the clock relatively slower may always
+        // take precedence to acquire the lock, this is unfair;The fair and unfair in ReentrantLock is through 
+        // waitNode(check waiting items at first or not)
+        zSetOperations.add(semaphoreKey, member, System.currentTimeMillis());
+        Long rank = zSetOperations.rank(semaphoreKey, member);
+        if (rank != null) {
+            if (rank > (permits - 1)) {
+                zSetOperations.remove(semaphoreKey, member);
+                return null;
+            } else {
+                return member;
+            }
+        }
+        
+        return null;
+    }
+    
+    @Transactional
+    public boolean releaseSemaphore(String member) {
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        Long removed = zSetOperations.remove(semaphoreKey, member);
+        return removed != null && removed > 0;
+    }
+    
+    String counterSemaphore = "semaphore:remote:counter";
+    String ownerSemaphore = "semaphore:remote:owner";
+    String timeoutSemaphore = "semaphore:remote:timeout";
+    
+    @Transactional
+    public String fairAcquireSemaphore(int permits, long timeout) {
+        //to avoid inconsistent lock in different system, introduce counter zSet to produce continuous time-like
+        // stamps 
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        ValueOperations<String, Object> valueOperations = redisTemplate.opsForValue();
+        Long counter = valueOperations.increment(counterSemaphore);
+        if (counter != null) {
+            String member = String.valueOf(UUID.randomUUID());
+            // counter as owner score to ensure consistency
+            zSetOperations.add(ownerSemaphore, member, counter);
+            long currentTimeMillis = System.currentTimeMillis();
+            long timeoutMillis = currentTimeMillis - timeout;
+            // it's relatively fair but timeout itself still depend on system lock
+            zSetOperations.add(timeoutSemaphore, member, currentTimeMillis);
+            zSetOperations.removeRangeByScore(timeoutSemaphore, 0, timeoutMillis);
+            // intersect with timeout to filter timed out items
+            zSetOperations.intersectAndStore(ownerSemaphore, List.of(timeoutSemaphore), ownerSemaphore
+            , RedisZSetCommands.Aggregate.SUM, RedisZSetCommands.Weights.of(1, 0));
+            // check if current added owner item exceed the permits
+            Long rank = zSetOperations.rank(ownerSemaphore, member);
+            if (rank != null && rank <= (permits - 1)) {
+                return member;
+            } else {
+                zSetOperations.remove(ownerSemaphore, member);
+                zSetOperations.remove(timeoutSemaphore, member);
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    @Transactional
+    public boolean fairReleaseSemaphore(String member) {
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        Long timeout = zSetOperations.remove(timeoutSemaphore, member);
+        Long owner = zSetOperations.remove(ownerSemaphore, member);
+        return timeout != null && owner != null && timeout > 0 && owner > 0;
+    }
+    
+    @Transactional
+    public boolean fairRefreshSemaphore(String member) {
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        // there's no XX option in add operation, lua can be helpful
+        DefaultRedisScript<Object> script = new DefaultRedisScript<>();
+        script.setLocation(new ClassPathResource("/lua/TimeOutLock.lua"));
+        Object timedOutK = redisTemplate.execute(script, Collections.singletonList("timedOutK"), "expire in 40 s", 40);
+        System.out.println(timedOutK);
+        return timedOutK != null;
+    }
+    
+    @Test
+    void luaTest() {
+        DefaultRedisScript<Object> script = new DefaultRedisScript<>();
+        script.setResultType(Object.class);
+        script.setLocation(new ClassPathResource("/lua/TimeOutLock.lua"));
+        //这里需要使用string方式序列化，否则会报ERR Error running script (call to f_97cdc38cfdaa799aaf5d07131e0f0fbee262ef98):
+        // @user_script:5: ERR value is not an integer or out of range 
+        Object timedOutK = stringRedisTemplate.execute(script, Collections.singletonList("timedOutK"), "T1", "200");
+//        Object timedOutK = redisTemplate.execute(script, Collections.singletonList("zsetKey"), "T1", new BigDecimal("20.3"));
+        System.out.println(timedOutK);
+    }
+    
+    private Object executeLua(String path, List<String> keys, Object... args) {
+        DefaultRedisScript<Object> script = new DefaultRedisScript<>();
+        script.setResultType(Object.class);
+        script.setLocation(new ClassPathResource(path));
+        //这里需要使用string方式序列化，否则会报ERR Error running script (call to f_97cdc38cfdaa799aaf5d07131e0f0fbee262ef98):
+        // @user_script:5: ERR value is not an integer or out of range 
+        //        Object timedOutK = redisTemplate.execute(script, Collections.singletonList("zsetKey"), "T1", new BigDecimal("20.3"));
+        return stringRedisTemplate.execute(script, keys, args);
+    }
+    
+    @Test
+    void luaReleaseLock() {
+        String timeoutKey = "timedOutK";
+        String timeoutVal = UUID.randomUUID().toString();
+        executeLua("/lua/TimeOutLock.lua", Collections.singletonList(timeoutKey), timeoutVal, "20");
+        System.out.println(executeLua("/lua/ReleaseLock.lua", Collections.singletonList(timeoutKey), timeoutVal));
+    }
+    
+    @Test
+    void luaSemaphore() {
+        System.out.println(executeLua("/lua/SemaphoreLock.lua", List.of(ownerSemaphore, counterSemaphore, timeoutSemaphore),
+                "5", UUID.randomUUID().toString(), String.valueOf(System.currentTimeMillis()), 
+                String.valueOf(1000 * 60 * 3)));
+    }
+    
+    @Test
+    void luaSemaphoreSimplified() {
+        System.out.println(executeLua("/lua/SemaphoreLockSimplified.lua", List.of(ownerSemaphore),
+                "5", UUID.randomUUID().toString(), String.valueOf(System.currentTimeMillis()), 
+                String.valueOf(1000 * 60 * 3)));
+    }
+    
+    @Test
+    void luaAnything() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setResultType(Long.class);
+        script.setLocation(new ClassPathResource("/lua/ZAddXX.lua"));
+        //这里需要使用string方式序列化，否则会报ERR Error running script (call to f_97cdc38cfdaa799aaf5d07131e0f0fbee262ef98):
+        // @user_script:5: ERR value is not an integer or out of range 
+        //        Object timedOutK = redisTemplate.execute(script, Collections.singletonList("zsetKey"), "T1", new BigDecimal("20.3"));
+        System.out.println(stringRedisTemplate.execute(script, Collections.singletonList("Key"), "val"));
+    }
+    
+    @Test
+    void luaFuncTest() {
+        DefaultRedisScript<List> script = new DefaultRedisScript<>();
+        script.setResultType(List.class);
+        script.setLocation(new ClassPathResource("/lua/AutoComplete.lua"));
+        //这里需要使用string方式序列化，否则会报ERR Error running script (call to f_97cdc38cfdaa799aaf5d07131e0f0fbee262ef98):
+        // @user_script:5: ERR value is not an integer or out of range 
+        //        Object timedOutK = redisTemplate.execute(script, Collections.singletonList("zsetKey"), "T1", new BigDecimal("20.3"));
+        System.out.println(stringRedisTemplate.execute(script, Arrays.asList(guild, "a"), UUID.randomUUID().toString()));
+    }
+    
+    String contactKeyPrefix = "Contact:"; 
+    private void updateContact(String userId, String keyWords) {
+        ListOperations<String, Object> opsForList = redisTemplate.opsForList();
+        String userContactKey = contactKeyPrefix + userId;
+        opsForList.remove(userContactKey, 1, keyWords);
+        opsForList.leftPush(userContactKey, keyWords);
+        opsForList.trim(userContactKey, 0, 99);
+    }
+    
+    private List<Object> matchWords(String wordsPrefix, String userId) {
+        ListOperations<String, Object> opsForList = redisTemplate.opsForList();
+        String userContactKey = contactKeyPrefix + userId;
+        List<Object> contactList = opsForList.range(userContactKey, 0, -1);
+        if (contactList != null && contactList.size() > 0) {
+            return contactList.stream().filter(c -> String.valueOf(c).startsWith(wordsPrefix)).collect(Collectors.toList());
+        }
+        
+        return null;
+    }
+    
+    private List<String> getPrefixAndSuffixInDic(String word) {
+        //abbz abb{ [abc] abca abcd abcz abc{
+        //aa{ ab`{ [aba] abaa abab abaz aba{
+        word = word.toLowerCase();
+        String dicOrderedLetters = "`abcdefghijklmnopqrstuvwxyz{";
+        int length = word.length();
+        if (length == 0) {
+            return null;
+        }
+        
+        String lastLetter = word.substring(length - 1);
+        String prefixStr = word.substring(0, length - 1);
+        char predecessorLetter = dicOrderedLetters.charAt(dicOrderedLetters.indexOf(lastLetter) - 1);
+        
+        return List.of(prefixStr + predecessorLetter + "{", word + "{");
+    }
+    
+    String memberPrefix = "member:";
+    String guild = "WeChat";
+    @Test
+    @Transactional
+    void dictionaryAutoCompleteTest() {
+        String guild = "WeChat";
+        Set<String> result = listRangedItems("a", guild);
+        System.out.println(result);
+    }
+    
+    @Test
+    void prepareDic() {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        String guild = "WeChat";
+        String dicKey = memberPrefix + guild;
+        Set<ZSetOperations.TypedTuple<String>> tuples = new HashSet<>();
+        tuples.add(ZSetOperations.TypedTuple.of("a", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("abc", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("ad", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("bc", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("cab", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("dfb", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("ec", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("fac", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("jams", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("smith", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("willian", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("deliberate", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("shrewdness", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("guild", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("hello", 0D));
+        tuples.add(ZSetOperations.TypedTuple.of("world", 0D));
+        zSetOperations.add(dicKey, tuples);
+    }
+    
+    private Set<String> listRangedItems(String keyWord, String guild) {
+        List<String> prefixAndSuffixInDic = getPrefixAndSuffixInDic(keyWord);
+        if (prefixAndSuffixInDic == null || prefixAndSuffixInDic.size() == 0) {
+            return null;
+        }
+        String identifier = UUID.randomUUID().toString();
+        String prefix = prefixAndSuffixInDic.get(0) + identifier;
+        String suffix = prefixAndSuffixInDic.get(1) + identifier;
+        String dicKey = memberPrefix + guild;
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        zSetOperations.add(dicKey, prefix, 0);
+        zSetOperations.add(dicKey, suffix, 0);
+
+        //this way may return lots of items, so need to shrink the range
+        Set<String> result = zSetOperations.rangeByLex(dicKey, RedisZSetCommands.Range.range().gt(prefix).lt(suffix));
+//        Long start = zSetOperations.rank(dicKey, prefix);
+//        Long end = zSetOperations.rank(dicKey, suffix);
+//        //simulate to determine the number from not matched and one matched and so on
+//        //this way will return at most 10 matched items
+//        long shrinkedEnd = Math.min(start + 9, end - 2);
+//        zSetOperations.remove(dicKey, prefix, suffix);
+//        return zSetOperations.range(dicKey, start, shrinkedEnd);
+        zSetOperations.remove(dicKey, prefix, suffix);
+        return result;
+    }
+    
+    
 
 }
