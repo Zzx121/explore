@@ -5,6 +5,8 @@ import cn.edu.djtu.db.entity.Customer;
 import cn.edu.djtu.db.entity.Gender;
 import lombok.extern.java.Log;
 import org.junit.jupiter.api.Test;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.framework.ProxyFactory;
@@ -129,4 +131,6 @@ public class BasicTest {
     void springAopTest() {
         ProxyFactory factory = new ProxyFactory();
     }
+    
+    
 }

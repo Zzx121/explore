@@ -1,16 +1,26 @@
 package cn.edu.djtu.db;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.Value;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.connection.RedisZSetCommands;
 import org.springframework.data.redis.core.*;
+import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,6 +49,9 @@ public class RedisInActionTest {
 
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Test
     void testConnection() {
@@ -119,25 +132,25 @@ public class RedisInActionTest {
 
     @Test
     void initUsers() {
-        HashOperations<String, Object, Object> hashOperations = redisTemplate.opsForHash();
+//        HashOperations<String, Object, Object> hashOperations = redisTemplate.opsForHash();
         HashOperations<String, Object, Object> stringObjectObjectHashOperations = stringRedisTemplate.opsForHash();
-        hashOperations.put(sellerKey, nameKey, "SAM");
-        hashOperations.put(sellerKey, balanceKey, 2000.00);
-
-        hashOperations.put(buyerKey, nameKey, "SMITH");
-        hashOperations.put(buyerKey, balanceKey, 495.00);
-
-//        stringObjectObjectHashOperations.put(sellerKey, nameKey, "SAM");
-//        stringObjectObjectHashOperations.put(sellerKey, balanceKey, "2000.00");
+//        hashOperations.put(sellerKey, nameKey, "SAM");
+//        hashOperations.put(sellerKey, balanceKey, 2000.00);
 //
-//        stringObjectObjectHashOperations.put(buyerKey, nameKey, "SMITH");
-//        stringObjectObjectHashOperations.put(buyerKey, balanceKey, "495.00");
+//        hashOperations.put(buyerKey, nameKey, "SMITH");
+//        hashOperations.put(buyerKey, balanceKey, 495.00);
+
+        stringObjectObjectHashOperations.put(sellerKey, nameKey, "SAM");
+        stringObjectObjectHashOperations.put(sellerKey, balanceKey, "2000.00");
+
+        stringObjectObjectHashOperations.put(buyerKey, nameKey, "SMITH");
+        stringObjectObjectHashOperations.put(buyerKey, balanceKey, "495.00");
         redisTemplate.opsForZSet().add(marketKey, itemKey, price);
 //        redisTemplate.opsForHash().increment(sellerKey, balanceKey, 2000.30);
 //        redisTemplate.opsForHash().increment(buyerKey, balanceKey, 500.43);
 //        hashOperations.put("users:2", balanceKey, 394.8);
-        System.out.println(hashOperations.get(sellerKey, balanceKey));
-        System.out.println(hashOperations.get(buyerKey, balanceKey));
+//        System.out.println(hashOperations.get(sellerKey, balanceKey));
+//        System.out.println(hashOperations.get(buyerKey, balanceKey));
 
         System.out.println(stringObjectObjectHashOperations.get(sellerKey, balanceKey));
         System.out.println(stringObjectObjectHashOperations.get(buyerKey, balanceKey));
@@ -638,6 +651,238 @@ public class RedisInActionTest {
         return result;
     }
     
+    @Test
+    void marketLuaTest() {
+        System.out.println(executeLua("/lua/MarketPurchase.lua", Arrays.asList("SAM", "SMITH"), "ItemAB", "383.13"));
+    }
     
+    @Test
+    void counterRecordTest() {
+        recordCounter("hits", 15);
+        recordCounter("login", 5);
+        recordCounter("transfer", 9);
+//        getCounter("hits", 300);
+//        cleanCounters();
+    }
+    private List<Integer> precisionList = Arrays.asList(5, 30, 60, 300, 600, 1800, 3600, 3600 * 6, 3600 * 24, 3600 * 24 * 30);
+    private String counterKeyPrefix = "COUNTER:";
+    private String knownKey = "KNOWN:";
+    private void recordCounter(String counterCategory, int hits) {
+        precisionList.forEach(p -> {
+            long epochSecond = Instant.now().getEpochSecond();
+            long secondStart = epochSecond / p * p;
+            String categoryKey = p + ":" + counterCategory;
+            redisTemplate.opsForHash().increment(counterKeyPrefix + categoryKey, secondStart, hits);
+            stringRedisTemplate.opsForZSet().add(knownKey, categoryKey, 0);
+        });
+    }
+    
+    private void getCounter(String counterCategory, int precision) {
+        String key = counterKeyPrefix + precision + ":" + counterCategory;
+        Set<Object> keys = redisTemplate.opsForHash().keys(key);
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(key);
+        System.out.println(keys);
+        System.out.println(entries);
+    }
+
+    /**
+     * Because the hash don't have expiration for the subHashKey, so the solution is through zset
+     * Control the clean interval just same as the putting interval and at most 1 minutes a time
+     */
+    private void cleanCounters(int itemsRetain) throws InterruptedException {
+        //need to do transaction or pipeline
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        HashOperations<String, Object, Object> hashOperations = redisTemplate.opsForHash();
+        int passes = 0;
+        int index = 0;
+        Long size = zSetOperations.zCard(knownKey);
+        while (size != null && index < size) {
+            passes++;
+            Set<String> knownCounterSet = zSetOperations.range(knownKey, index, index);
+            if (knownCounterSet != null && knownCounterSet.size() > 0) {
+                String knownCounter = knownCounterSet.iterator().next();
+                if (knownCounter != null) {
+                    String[] counterSplits = knownCounter.split(":");
+                    if (counterSplits.length > 0) {
+                        String precisionStr = counterSplits[0];
+                        
+                        int precision = Integer.parseInt(precisionStr);
+                        //precision less than 1 minutes just clean
+                        if (precision < 60 || (passes * 60 % precision == 0)) {
+                            if (index == size - 1) {
+                                index = 0;
+                            } else {
+                                index++;
+                            }
+                            String counterKey = counterKeyPrefix + knownCounter;
+                            Set<Object> keys = hashOperations.keys(counterKey);
+                            if (keys.size() > 0) {
+                                List<Object> keysList = keys.stream().sorted().collect(Collectors.toList());
+                                int listSize = keysList.size();
+                                if (listSize > itemsRetain) {
+                                    List<Object> deletingItems = keysList.subList(itemsRetain - 1, listSize);
+                                    hashOperations.delete(counterKey, deletingItems);
+                                }
+                            } else {
+                                zSetOperations.remove(knownKey, knownCounter);
+                                index--;
+                            }
+                        } else {
+                            continue;
+                        }
+//                        hashOperations.get(counterKey)
+                    }
+                }
+            }
+           
+            Thread.sleep(60000);
+        }
+    }
+    
+    @Test
+    void divisionTest() {
+        System.out.println(30 / 60);
+        System.out.println(30 % 60);
+        System.out.println(redisTemplate.opsForHash().keys("COUNTER:60:transfer").stream().sorted().collect(Collectors.toList()).subList(118, 394));
+    }
+    
+    private final String statsPrefix = "stats:";
+
+    /**
+     * statistics by hour
+     * @param context e.g. profile
+     * @param type e.g. access time
+     * @param value value
+     */
+    private void updateStats(String context, String type, Double value) {
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH");
+        String hourAfter = dateTimeFormatter.format(LocalDateTime.now().plusHours(1));
+        System.out.println(hourAfter);
+        String hourNow = dateTimeFormatter.format(LocalDateTime.now());
+        System.out.println(hourNow);
+        System.out.println(LocalDateTime.parse(hourAfter, dateTimeFormatter).isAfter(LocalDateTime.parse(hourNow, dateTimeFormatter)));
+        String statsKey = statsPrefix + context + ":" + type;
+        String startKey = statsKey + ":start";
+        ZSetOperations<String, Object> zSetOperations = redisTemplate.opsForZSet();
+        ValueOperations<String, Object> valueOperations = redisTemplate.opsForValue();
+        Object startVal = valueOperations.get(startKey);
+        if (startVal != null && LocalDateTime.parse((CharSequence) startVal, dateTimeFormatter).isBefore(LocalDateTime.parse(hourNow, dateTimeFormatter))) {
+            redisTemplate.rename(startKey, statsKey + ":preStart");
+            redisTemplate.rename(statsKey, statsKey + ":last");
+            valueOperations.set(startKey, hourNow);
+        } 
+        String statsMin = statsKey + ":min";
+        String statsMax = statsKey + ":max";
+        zSetOperations.add(statsMin, "min", value);
+        zSetOperations.add(statsMax, "max", value);
+        zSetOperations.unionAndStore(statsKey, Collections.singleton(statsMin), statsKey, RedisZSetCommands.Aggregate.MIN);
+        zSetOperations.unionAndStore(statsKey, Collections.singleton(statsMax), statsKey, RedisZSetCommands.Aggregate.MAX);
+        redisTemplate.delete(Arrays.asList(statsMax, statsMin));
+        
+        zSetOperations.incrementScore(statsKey, "sum", value);
+        zSetOperations.incrementScore(statsKey, "count", 1);
+        zSetOperations.incrementScore(statsKey, "sumsq", value * value);
+    }
+    
+    @Test
+    void statsTest() {
+        updateStats("www.abc.com", "hits", 3.3D);
+    }
+    
+    private String chatRoomPrefix = "chats:";
+    private String chatUserPrefix = "seen:";
+    private String chatMsgPrefix = "chatMsg:";
+    private String chatIdsPrefix = "ids:chat:";
+    private String msgIdsPrefix = "ids:msg:";
+
+    ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+    ValueOperations<String, String> stringOperation = stringRedisTemplate.opsForValue();
+
+
+    public void createChatSession(Long chatId, String sender, String message, List<String> recipients) {
+        chatId = (chatId == null || chatId <= 0) ? stringOperation.increment(chatIdsPrefix) : chatId;
+        recipients.add(sender);
+        Set<ZSetOperations.TypedTuple<String>> sendersSet = new HashSet<>();
+        Long finalChatId = chatId;
+        recipients.forEach(r -> {
+            sendersSet.add(new DefaultTypedTuple<>(r, 0D));
+            //user's chat room record
+            zSetOperations.add(chatUserPrefix + r, String.valueOf(finalChatId), 0D);
+        });
+        //chat room's user record
+        zSetOperations.add(chatRoomPrefix + chatId, sendersSet);
+
+        try {
+            sendMsg(chatId, sender, message);
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * just put the message in the specific chat zset
+     * @param chatId
+     * @param sender
+     * @param message
+     * @throws JsonProcessingException
+     */
+    public void sendMsg(Long chatId, String sender, String message) throws JsonProcessingException {
+        //id in chat 
+        Long msgId = stringOperation.increment(msgIdsPrefix + chatId);
+        zSetOperations.add(chatMsgPrefix + chatId, objectMapper.writeValueAsString(Msg.builder().sender(sender).
+                message(message).ts(System.currentTimeMillis()).id(msgId)), msgId);
+    }
+    
+    @Getter
+    @Setter
+    @Builder
+    public static class Msg {
+        private String sender;
+        private String message;
+        private Long ts;
+        private Long id;
+    }
+    
+    @Transactional
+    public Map<String, Set<TypedTuple<String>>> fetchPendingMessagesForUser(String sender) {
+        Map<String, Set<TypedTuple<String>>> messagesOfChat = new HashMap<>();
+        Set<TypedTuple<String>> seenChats = zSetOperations.rangeWithScores(chatUserPrefix + sender, 0, -1);
+        if (seenChats != null && seenChats.size() > 0) {
+            seenChats.forEach(t -> {
+                String chatId = t.getValue();
+                if (chatId != null) {
+                    Double msgId = t.getScore();
+                    Set<TypedTuple<String>> remainingMessages = zSetOperations.rangeByScoreWithScores(chatMsgPrefix + chatId, msgId + 1, Integer.MAX_VALUE);
+                    if (remainingMessages != null && remainingMessages.size() > 0) {
+                        Optional<Double> maxMsgIdOpt = remainingMessages.stream().map(TypedTuple::getScore).max(Double::compare);
+                        messagesOfChat.put(chatId, remainingMessages);
+                        maxMsgIdOpt.ifPresent(maxMsgId -> {
+                            zSetOperations.add(chatUserPrefix + sender, chatId, maxMsgId);
+                            zSetOperations.add(chatRoomPrefix + chatId, sender, maxMsgId);
+                        });
+                    }
+                }
+            });
+        }
+        
+        return messagesOfChat;
+    }
+    
+    @Transactional
+    public void joinChat(Long chatId, String sender) {
+        double recentMsgId = stringOperation.get(msgIdsPrefix + chatId) == null ? 0 : Double.parseDouble(Objects.requireNonNull(stringOperation.get(msgIdsPrefix + chatId)));
+        zSetOperations.add(chatRoomPrefix + chatId, sender, recentMsgId);
+        zSetOperations.add(chatUserPrefix + sender, String.valueOf(chatId), recentMsgId);
+    }
+    
+    public void leaveChat(Long chatId, String sender) {
+        zSetOperations.remove(chatRoomPrefix + chatId, sender);
+        zSetOperations.remove(chatUserPrefix + sender, chatId);
+        //clear up when the chat room is empty
+        Long leftUserCount = zSetOperations.zCard(chatRoomPrefix + chatId);
+        if (leftUserCount == null || leftUserCount == 0) {
+            redisTemplate.delete(Arrays.asList(msgIdsPrefix + chatId, chatMsgPrefix + chatId));
+        }
+    }
 
 }
