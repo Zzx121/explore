@@ -52,23 +52,25 @@ public class RequestUtil {
         // body payload
         try {
             String contentType = request.getContentType();
-            if (contentType.contains(MediaType.APPLICATION_FORM_URLENCODED_VALUE)) {
-                String bodyStr = CharStreams.toString(request.getReader());
-                if (StringUtils.isNotEmpty(bodyStr)) {
-                    String paramValue = Splitter.on('&').trimResults().withKeyValueSeparator('=').split(bodyStr).get(paramKey);
-                    if (StringUtil.isNotEmpty(paramValue)) {
-                        return paramValue;
+            if (contentType != null) {
+                if (contentType.contains(MediaType.APPLICATION_FORM_URLENCODED_VALUE)) {
+                    String bodyStr = CharStreams.toString(request.getReader());
+                    if (StringUtils.isNotEmpty(bodyStr)) {
+                        String paramValue = Splitter.on('&').trimResults().withKeyValueSeparator('=').split(bodyStr).get(paramKey);
+                        if (StringUtil.isNotEmpty(paramValue)) {
+                            return paramValue;
+                        }
+                    } else {
+                        return null;
                     }
-                } else {
-                    return null;
-                }
-            } else if (contentType.contains(MediaType.APPLICATION_JSON_VALUE)) {
-                Map<String, String> bodyMap = new Gson().fromJson(request.getReader(), new TypeToken<Map<String, String>>() {
-                }.getType());
-                if (bodyMap != null && bodyMap.size() > 0) {
-                    String paramValue = bodyMap.get(paramKey);
-                    if (StringUtil.isNotEmpty(paramValue)) {
-                        return paramValue;
+                } else if (contentType.contains(MediaType.APPLICATION_JSON_VALUE)) {
+                    Map<String, String> bodyMap = new Gson().fromJson(request.getReader(), new TypeToken<Map<String, String>>() {
+                    }.getType());
+                    if (bodyMap != null && bodyMap.size() > 0) {
+                        String paramValue = bodyMap.get(paramKey);
+                        if (StringUtil.isNotEmpty(paramValue)) {
+                            return paramValue;
+                        }
                     }
                 }
             }

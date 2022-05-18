@@ -5,12 +5,14 @@ import cn.edu.djtu.excel.util.basic.RequestUtil;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.java.Log;
+import org.apache.poi.ss.formula.functions.T;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.*;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -53,14 +55,25 @@ public class AnythingController {
     }
 
     @GetMapping("/singletonCache")
-    public Object singletonCache(String key) {
+    public Object singletonCache(String key) throws ExecutionException, InterruptedException {
 //        return SingletonCache.getInstance().getCache(key);
-        return SingletonCache.getInstance().getCache(key, UUID::randomUUID);
+        return SingletonCache.getCache(key, () -> {
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return UUID.randomUUID();
+        });
     }
 
     private static class SingletonCache {
+        //expiration
+        //concurrent executing(Future)
+        //atomic put if absent contains check
+        //let spring manage that cache
         private static volatile SingletonCache singletonCache;
-        private ConcurrentMap<String, Object> cache;
+        private static final Map<String, Object> cache;
         private SingletonCache() {}
 
         public static SingletonCache getInstance() {
@@ -75,29 +88,32 @@ public class AnythingController {
             return singletonCache;
         }
 
-        {
+        static {
             cache = new ConcurrentHashMap<>();
         }
 
-        public Object getCache(String key) {
+        public static Object getCache(String key) {
             Object result = cache.get(key);
             if (result == null) {
                 result = UUID.randomUUID();
-                cache.put(key, result);
+                cache.putIfAbsent(key, result);
             }
             return result;
         }
 
-        public Object getCache(String key, Supplier<Object> supplier) {
+        public static <T> Object getCache(String key, Supplier<T> supplier) throws ExecutionException, InterruptedException {
             Object result = cache.get(key);
             if (result == null) {
-                result = supplier.get();
-                cache.put(key, result);
+                FutureTask<UUID> uuidFutureTask = new FutureTask<>(UUID::randomUUID);
+                uuidFutureTask.run();
+                UUID uuid = uuidFutureTask.get();
+                CompletableFuture<T> completableFuture = CompletableFuture.supplyAsync(supplier);
+                result = completableFuture.get();
+                cache.putIfAbsent(key, result);
             }
+            
             return result;
         }
-
-
     }
     
 }

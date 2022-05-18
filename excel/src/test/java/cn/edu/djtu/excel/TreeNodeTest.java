@@ -4,6 +4,10 @@ import cn.edu.djtu.excel.entity.Customer;
 import com.diffplug.common.base.TreeNode;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -118,5 +122,15 @@ public class TreeNodeTest {
         List<Object> l = Collections.emptyList();
         l.add(2);
         System.out.println(l);
+    }
+    
+    @Test
+    void formatDateTime() {
+        CharSequence text;
+        String timeStr = "2021-09-08 11:04:08";
+        LocalDateTime localDateTime = LocalDateTime.parse("2021-09-08 11:04:08",
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.of("UTC")));
+        System.out.println(localDateTime.toEpochSecond(ZoneOffset.of("+8")));
+        System.out.println(timeStr.length());
     }
 }

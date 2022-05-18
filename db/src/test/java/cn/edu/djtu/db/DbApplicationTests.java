@@ -7,6 +7,8 @@ import cn.edu.djtu.db.entity.Gender;
 import cn.edu.djtu.db.service.CustomerService;
 import org.apache.catalina.core.ApplicationContext;
 import org.junit.jupiter.api.Test;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +35,8 @@ class DbApplicationTests {
     private MockMvc mockMvc;
     @Autowired
     private CustomerController customerController;
+    @Autowired
+    RedissonClient redissonClient;
 
     @Test
     void contextLoads() {
@@ -55,6 +59,13 @@ class DbApplicationTests {
         mockMvc.perform(post("/customers", customers)).andExpect(status().isOk());
         new HashMap<>(11);
     }
-    
+
+    @Test
+    void redissonTest() throws InterruptedException {
+        RLock rLock = redissonClient.getLock("redisson test");
+        rLock.lock();
+//        Thread.sleep(5000);
+//        rLock.unlock();
+    }
 
 }
