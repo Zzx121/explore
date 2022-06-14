@@ -12,7 +12,11 @@ import java.util.concurrent.*;
  * @date 2022/4/19
  */
 public class ZookeeperTest {
-    String address = "127.0.0.1:2181";
+//    String address = "127.0.0.1:2181";
+//    String address = "172.21.128.1:2181";
+    // WSL2 use "#ip route" to get
+    String address = "172.21.139.150:2181";
+//    String address = "DESKTOP-1ON7TVC.local:2181";
     @Test
     void barrierTest() {
         Barrier barrier = new Barrier(address, "/barrier", 3);
@@ -42,7 +46,7 @@ public class ZookeeperTest {
     @Test
     void zookeeperConnTest() {
         try {
-            ZooKeeper zooKeeper = new ZooKeeper("127.0.0.1:2181", 3000, event -> {
+            ZooKeeper zooKeeper = new ZooKeeper(address, 3000, event -> {
 
             });
             try {
