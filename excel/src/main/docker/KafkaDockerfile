@@ -1,0 +1,12 @@
+FROM openjdk:11.0.16-slim
+WORKDIR /tmp/kafka
+# 1. download kafka 
+# 2. extract kafka(need to wait for finishing of the download), maybe the ADD command is suitable in that situation
+# 3. change the kafka config file like "servers", "advertised.servers",
+# sed 's/listeners=PLAINTEXT:\/\/0.0.0.0:9092/listeners=PLAINTEXT:\/\/:9092/' server.properties
+# 4. start up zookeeper 
+# 5. wait for zookeeper to start(how to) 
+# 6. start kafka server 
+# 7. process: 1) through direct from cmd line 2) through bash file(need to copy that file into docker image)
+RUN curl https://dlcdn.apache.org/kafka/3.3.1/kafka_2.13-3.3.1.tgz && tar -xzf kafka_2.13-3.3.1.tgz && cd kafka_2.13-3.3.1 &&
+bin/zookeeper-server-start.sh && bin/kafka-server-start.sh 

@@ -307,4 +307,41 @@ public class ConcurrencyTest {
         System.out.println(intArray[0]);
     }
     
+    ExecutorService threadPool = new ThreadPoolExecutor(5, 10, 10, TimeUnit.SECONDS, 
+            new ArrayBlockingQueue<>(10));
+    @Test
+    void cyclicBarrierTest() throws BrokenBarrierException, InterruptedException {
+        CyclicBarrier barrier = new CyclicBarrier(5, () -> System.out.println("Tripped runner"));
+        List<Callable<String>> runners = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            runners.add(() -> {
+                try {
+                    barrier.await();
+                    System.out.println("Await runner");
+                    return "done";
+                } catch (InterruptedException | BrokenBarrierException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+        threadPool.invokeAll(runners);
+    }
+
+    public static void main(String[] args) {
+        CyclicBarrier barrier = new CyclicBarrier(5, () -> System.out.println("Tripped runner"));
+        ExecutorService threadPool = new ThreadPoolExecutor(5, 10, 10, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(10));
+        //这里有一个问题就是@Test的方式不会等异步的程序结束，之前碰到过类似的问题
+        for (int i = 0; i < 12; i++) {
+            threadPool.execute(() -> {
+                try {
+                    barrier.await();
+                    System.out.println("Await runner");
+                } catch (InterruptedException | BrokenBarrierException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+    }
+    
 }

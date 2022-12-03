@@ -2,6 +2,7 @@ package cn.edu.djtu.db.config;
 
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
@@ -18,13 +19,13 @@ import java.util.Map;
  * @Date 2022/9/22
  **/
 @Configuration
-public class KafkaTransactionConfig {
+public class KafkaNonTransactionConfig {
     @Bean
     public Map<String, Object> producerFactoryConfigs() {
         return Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092", 
                 ProducerConfig.TRANSACTION_TIMEOUT_CONFIG, "1000", 
                 // If without this, the transaction will not function properly.
-                ProducerConfig.TRANSACTIONAL_ID_CONFIG, "weCom_", 
+//                ProducerConfig.TRANSACTIONAL_ID_CONFIG, "weCom_", 
                 ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
                 ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
     }

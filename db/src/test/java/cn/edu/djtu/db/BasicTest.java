@@ -160,4 +160,11 @@ public class BasicTest {
             return null;
         });
     }
+    
+    @Test
+    void patternTest() {
+        Pattern pattern = Pattern.compile("^weCom_customer_transactional.*$");
+        Matcher matcher = pattern.matcher("weCom_customer_transactional");
+        boolean matches = matcher.matches();
+    }
 }
