@@ -16,6 +16,8 @@ spring:
       stat-view-servlet:
         enabled: true
         url-pattern: /druid/*
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092, 127.0.0.1:9093, 127.0.0.1:9094
 #  redis:
 #    database: 0
 #    host: localhost
@@ -28,3 +30,4 @@ mybatis:
     map-underscore-to-camel-case: true
 server:
   port: 8302
+
