@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -167,4 +168,12 @@ public class BasicTest {
         Matcher matcher = pattern.matcher("weCom_customer_transactional");
         boolean matches = matcher.matches();
     }
+
+    @Test
+    void concurrentSkipListSetTest() {
+        ConcurrentSkipListSet<Long> test = new ConcurrentSkipListSet<>();
+        test.add(10L);
+        System.out.println(test);
+    }
+
 }
