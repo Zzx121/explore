@@ -885,4 +885,52 @@ public class RedisInActionTest {
         }
     }
 
+    private String lockValue;
+
+    //The primary task is just implement the renewal of lock's expiration time
+    //1) Need to check ahead rather than the right moment
+    //2) How to trigger the renewal(start after acquired the lock), and when to stop that(the lock has been
+    //released by the owner(check before set the expiration))
+    //3) How to check and set the expiration, through Thread(ScheduledExecutorService, advanced timers)
+    public boolean lock(String usageScene) {
+        String separator = "_";
+        lockValue = String.join(separator, UUID.randomUUID().toString(), String.valueOf(System.currentTimeMillis()));
+        Boolean aBoolean = redisTemplate.opsForValue().setIfAbsent(generateLockKey(usageScene),
+                lockValue, 30, TimeUnit.SECONDS);
+        return Boolean.TRUE.equals(aBoolean);
+    }
+
+    public boolean unLock(String usageScene) {
+        //Just the normal way to unlock, need to use lua in practice
+        ValueOperations<String, Object> opsForValue = redisTemplate.opsForValue();
+        String key = generateLockKey(usageScene);
+        Object o = opsForValue.get(key);
+        if (lockValue.equals(o)) {
+            redisTemplate.delete(key);
+            return true;
+        }
+
+        return false;
+    }
+
+    private String generateLockKey(String usageScene) {
+        String appName = "Explorer";
+        String separator = "_";
+        return String.join(separator, appName, usageScene, UUID.randomUUID().toString(), String.valueOf(System.currentTimeMillis()));
+    }
+
+    ScheduledExecutorService scheduled = Executors.newScheduledThreadPool(10);
+
+    public void renewalExpiration(String lockKey) {
+        //Just every 10s, add on 30s of expiration
+        scheduled.scheduleAtFixedRate(() -> {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+                Long expirationInSeconds = redisTemplate.getExpire(lockKey, TimeUnit.SECONDS);
+                if (expirationInSeconds != null) {
+                    redisTemplate.expire(lockKey, expirationInSeconds + 30, TimeUnit.SECONDS);
+                }
+            }
+        }, 10, 10, TimeUnit.SECONDS);
+    }
+
 }
