@@ -15,7 +15,8 @@ public class ZookeeperTest {
 //    String address = "127.0.0.1:2181";
 //    String address = "172.21.128.1:2181";
     // WSL2 use "#ip route" to get
-    String address = "172.21.139.150:2181";
+//    String address = "172.21.139.150:2181";
+    String address = "101.42.159.16:2181";
 //    String address = "DESKTOP-1ON7TVC.local:2181";
     @Test
     void barrierTest() {
@@ -61,6 +62,17 @@ public class ZookeeperTest {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+    
+    @Test
+    void checkNode() {
+        try {
+            ZooKeeper zooKeeper = new ZooKeeper(address, 3000, event -> {
+            });
+            System.out.println("Stat of node ---" + zooKeeper.exists("/n4", false));
+        } catch (IOException | InterruptedException | KeeperException e) {
+            throw new RuntimeException(e);
         }
     }
 
