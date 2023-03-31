@@ -18,10 +18,10 @@ spring:
         url-pattern: /druid/*
   kafka:
     bootstrap-servers: 127.0.0.1:9092, 127.0.0.1:9093, 127.0.0.1:9094
-#  redis:
-#    database: 0
-#    host: localhost
-#    port: 6379
+  redis:
+    database: 0
+    host: 101.42.159.16
+    port: 6379
 mybatis:
   type-aliases-package: cn.edu.djtu.db.entity
   mapper-locations: classpath:mapper/*.xml

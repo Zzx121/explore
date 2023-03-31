@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
  * @date 2021/6/12
  */
 @SpringBootTest
+@Slf4j
 public class RedisInActionTest {
     int sellerId = 27;
     String itemId = "itemA";
@@ -795,11 +797,13 @@ public class RedisInActionTest {
     private String chatIdsPrefix = "ids:chat:";
     private String msgIdsPrefix = "ids:msg:";
 
-    ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
-    ValueOperations<String, String> stringOperation = stringRedisTemplate.opsForValue();
+    
 
 
     public void createChatSession(Long chatId, String sender, String message, List<String> recipients) {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        ValueOperations<String, String> stringOperation = stringRedisTemplate.opsForValue();
+        
         chatId = (chatId == null || chatId <= 0) ? stringOperation.increment(chatIdsPrefix) : chatId;
         recipients.add(sender);
         Set<ZSetOperations.TypedTuple<String>> sendersSet = new HashSet<>();
@@ -827,6 +831,9 @@ public class RedisInActionTest {
      * @throws JsonProcessingException
      */
     public void sendMsg(Long chatId, String sender, String message) throws JsonProcessingException {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        ValueOperations<String, String> stringOperation = stringRedisTemplate.opsForValue();
+        
         //id in chat 
         Long msgId = stringOperation.increment(msgIdsPrefix + chatId);
         zSetOperations.add(chatMsgPrefix + chatId, objectMapper.writeValueAsString(Msg.builder().sender(sender).
@@ -845,6 +852,7 @@ public class RedisInActionTest {
     
     @Transactional
     public Map<String, Set<TypedTuple<String>>> fetchPendingMessagesForUser(String sender) {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
         Map<String, Set<TypedTuple<String>>> messagesOfChat = new HashMap<>();
         Set<TypedTuple<String>> seenChats = zSetOperations.rangeWithScores(chatUserPrefix + sender, 0, -1);
         if (seenChats != null && seenChats.size() > 0) {
@@ -870,12 +878,16 @@ public class RedisInActionTest {
     
     @Transactional
     public void joinChat(Long chatId, String sender) {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
+        ValueOperations<String, String> stringOperation = stringRedisTemplate.opsForValue();
+        
         double recentMsgId = stringOperation.get(msgIdsPrefix + chatId) == null ? 0 : Double.parseDouble(Objects.requireNonNull(stringOperation.get(msgIdsPrefix + chatId)));
         zSetOperations.add(chatRoomPrefix + chatId, sender, recentMsgId);
         zSetOperations.add(chatUserPrefix + sender, String.valueOf(chatId), recentMsgId);
     }
     
     public void leaveChat(Long chatId, String sender) {
+        ZSetOperations<String, String> zSetOperations = stringRedisTemplate.opsForZSet();
         zSetOperations.remove(chatRoomPrefix + chatId, sender);
         zSetOperations.remove(chatUserPrefix + sender, chatId);
         //clear up when the chat room is empty
@@ -895,9 +907,14 @@ public class RedisInActionTest {
     public boolean lock(String usageScene) {
         String separator = "_";
         lockValue = String.join(separator, UUID.randomUUID().toString(), String.valueOf(System.currentTimeMillis()));
-        Boolean aBoolean = redisTemplate.opsForValue().setIfAbsent(generateLockKey(usageScene),
+        String lockKey = generateLockKey(usageScene);
+        Boolean aBoolean = redisTemplate.opsForValue().setIfAbsent(lockKey,
                 lockValue, 30, TimeUnit.SECONDS);
-        return Boolean.TRUE.equals(aBoolean);
+        boolean result = Boolean.TRUE.equals(aBoolean);
+        if (result) {
+            renewalExpiration(lockKey);
+        }
+        return result;
     }
 
     public boolean unLock(String usageScene) {
@@ -927,10 +944,18 @@ public class RedisInActionTest {
             if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
                 Long expirationInSeconds = redisTemplate.getExpire(lockKey, TimeUnit.SECONDS);
                 if (expirationInSeconds != null) {
+                    log.info("【Expiration in seconds】 {}, 【lockKey】 {}", expirationInSeconds, lockKey);
                     redisTemplate.expire(lockKey, expirationInSeconds + 30, TimeUnit.SECONDS);
                 }
             }
         }, 10, 10, TimeUnit.SECONDS);
+    }
+    
+    @Test
+    void renewalTest() throws InterruptedException {
+        lock("ORDERING");
+        Thread.sleep(2000);
+        unLock("ORDERING");
     }
 
 }

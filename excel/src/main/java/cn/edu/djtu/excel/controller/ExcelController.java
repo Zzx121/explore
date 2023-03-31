@@ -3,10 +3,12 @@ package cn.edu.djtu.excel.controller;
 import cn.edu.djtu.excel.common.exception.PhoneAlreadyUsedException;
 import cn.edu.djtu.excel.entity.Customer;
 import cn.edu.djtu.excel.entity.Gender;
+import cn.edu.djtu.excel.service.DownloadService;
 import cn.edu.djtu.excel.service.ExcelService;
 import cn.edu.djtu.excel.util.basic.StringUtil;
 import cn.edu.djtu.excel.util.poi.ExcelUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +28,9 @@ import java.util.*;
 public class ExcelController {
     @Autowired
     private ExcelService excelService;
+    
+    @Autowired
+    private DownloadService downloadService;
     @GetMapping("/rest")
     public List<Customer> getByRestTemplate() {
         return excelService.getByRestTemplate();
@@ -89,6 +94,11 @@ public class ExcelController {
         }
         
         return list;
+    }
+    
+    @GetMapping("/download")
+    public ResponseEntity<Resource> download(String url) {
+        return downloadService.downloadFromOuterUrl(url, "test");
     }
     
 }
