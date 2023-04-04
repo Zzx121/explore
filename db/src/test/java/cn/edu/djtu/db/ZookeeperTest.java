@@ -2,6 +2,7 @@ package cn.edu.djtu.db;
 
 import org.apache.zookeeper.*;
 import org.apache.zookeeper.data.ACL;
+import org.apache.zookeeper.data.Id;
 import org.apache.zookeeper.data.Stat;
 import org.junit.jupiter.api.Test;
 
@@ -179,9 +180,9 @@ public class ZookeeperTest {
         ZooKeeper zooKeeper = new ZooKeeper(address, 3000, event -> System.out.printf("【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString()));
 
         try {
-            String result1 = zooKeeper.create("/tmp/duplicate1", new byte[1], List.of(new ACL()), CreateMode.EPHEMERAL_SEQUENTIAL);
+            String result1 = zooKeeper.create("/test/t1", new byte[1], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
             System.out.println(result1);
-            String result2 = zooKeeper.create("/tmp/duplicate1", new byte[1], List.of(new ACL()), CreateMode.EPHEMERAL_SEQUENTIAL);
+            String result2 = zooKeeper.create("/test/t1", new byte[1], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
             System.out.println(result2);
         } catch (KeeperException e) {
             throw new RuntimeException(e);
