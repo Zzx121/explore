@@ -15,6 +15,7 @@ import org.springframework.data.redis.connection.RedisZSetCommands;
 import org.springframework.data.redis.core.*;
 import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +47,8 @@ public class RedisInActionTest {
     //模拟其中一个线程改变值，看是否抛出异常
     ThreadPoolExecutor executor = new ThreadPoolExecutor(3, 5, 1, TimeUnit.MINUTES,
             new ArrayBlockingQueue<>(5));
+
+    private final Map<String, Long> observingMap = new HashMap<>();
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
@@ -917,6 +920,83 @@ public class RedisInActionTest {
         return result;
     }
 
+    /**
+     * Some concerns when implement the distributedLock
+     * Key points:
+     * 1. Make the acquires and release atomic(deadlock when no chance to release the lock)
+     * 2. In case of the error in client and redis server
+     * 3. The situation of race condition when the lock is delayed released(because of the halt of the client,
+     * because of the longer executing time, even because of the inconsistency of the redis cluster)
+     * Solutions:
+     * 1. Use set NX EX; get and decide whether to delete with LUA
+     * 2. Assign reasonable id for the key to only release the lock that published by self and easier to log and inspect,
+     * e.g. appName-lockName-timestamp
+     * 3. Heartbeat method to solve the situation of the execution is longer than the TTL duration and another client have
+     * the chance to obtain the lock and then the inconsistency occurs; the race condition(caused by the stop of the world,
+     * the inconsistency state of the redis cluster) so another way to handle this is just the logging of the possible
+     * race conditions when that happens(logging and metrics and even alerting)
+     * 4. The funny part of that is just the figuring out of the race condition, delayed release
+     */
+    public boolean lockRobust(String usageScene) {
+        int triedCount = 0;
+        ValueOperations<String, Object> valueOperations = redisTemplate.opsForValue();
+        lockValue = UUID.randomUUID().toString();
+        String lockKey = getLockKey(usageScene);
+        log.info("Attempting to acquire the lock, 【key】{},【value】{},【time】{}", lockKey, lockValue, LocalDateTime.now());
+        long timeout = 10;
+        Boolean gained = valueOperations.setIfAbsent(lockKey, lockValue, timeout, TimeUnit.SECONDS);
+        if (Boolean.TRUE.equals(gained)) {
+            log.info("Acquired the lock, 【key】{},【value】{},【time】{}", lockKey, lockValue, LocalDateTime.now());
+        } else {
+            log.warn("Lock in using, 【key】{},【value】{},【time】{}", lockKey, lockValue, LocalDateTime.now());
+            //Wait for some time to try again, here just 1/3 of the timeout
+            try {
+                triedCount++;
+                log.warn("Waiting to retry, 【key】{},【value】{},【time】{}, 【triedCount】{}", lockKey, lockValue
+                        , LocalDateTime.now(), triedCount);
+                Thread.sleep(timeout / 3);
+                lockRobust(usageScene);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        //Dealing of the reset of the TTL
+        //Need to be atomic TODO
+        //Considering the pub sub in redis, this way the LUA can be taken advantage of
+        observingMap.put(lockKey, timeout);
+        return Boolean.TRUE.equals(gained);
+    }
+
+    private String getLockKey(String usageScene) {
+        String appName = "exploreApplication";
+        return String.join("_", appName, usageScene);
+    }
+
+    public boolean unlock(String usageScene) {
+        RedisScript<Boolean> redisScript = RedisScript.of("local existedLock = redis.call('GET', KEYS[1])" +
+                "if existedLock == ARGV[1] then redis.call('DEL', KEYS[1]) return true else return false end", Boolean.class);
+        log.info("Unlock value ---{}", lockValue);
+        String lockKey = getLockKey(usageScene);
+        //Also need to be atomic TODO
+        observingMap.remove(lockKey);
+        return Boolean.TRUE.equals(redisTemplate.execute(redisScript, List.of(lockKey), lockValue));
+    }
+
+    public boolean unlockRobust(String usageScene) {
+        RedisScript<Boolean> redisScript = RedisScript.of("local existedLock = redis.call('GET', KEYS[1])" +
+                "if existedLock == ARGV[1] then redis.call('DEL', KEYS[1]) return true else return false end", Boolean.class);
+        String lockKey = getLockKey(usageScene);
+        Boolean result = redisTemplate.execute(redisScript, List.of(lockKey), lockValue);
+        if (Boolean.TRUE.equals(result)) {
+            log.info("Lock released, 【key】{},【value】{},【time】{}", lockKey, lockValue, LocalDateTime.now());
+        } else {
+            log.warn("Lock release failed, expired by redis server, 【key】{},【value】{},【time】{}", lockKey, lockValue, LocalDateTime.now());
+        }
+        //Also need to be atomic TODO
+        observingMap.remove(lockKey);
+        return Boolean.TRUE.equals(result);
+    }
+
     public boolean unLock(String usageScene) {
         //Just the normal way to unlock, need to use lua in practice
         ValueOperations<String, Object> opsForValue = redisTemplate.opsForValue();
@@ -957,5 +1037,21 @@ public class RedisInActionTest {
         Thread.sleep(2000);
         unLock("ORDERING");
     }
+
+    /**
+     * Redis lock need some arrangement, maybe better day after tomorrow, today just the logging of the locking schedule.
+     * Why use the logging: 
+     * 1) The race condition just can't be entirely eliminated because of the network failure, 
+     * halt of the client, halt of the server especially in the cluster mode 
+     * 2) The logging strategy is just the method to find out more instantly or debugging more robustly 
+     * 
+     * How to log:
+     * 1) When to start the acquiring
+     * 2) When successful acquired
+     * 3) When wait to acquire the lock(blocked)
+     * 4) When the lock expires(by redis)
+     * 5) When release the lock(active)
+     * The life cycle of Thread: NEW, RUNNABLE, WAITING, TIMED_WAITING, BLOCKED, TERMINATED
+     */
 
 }

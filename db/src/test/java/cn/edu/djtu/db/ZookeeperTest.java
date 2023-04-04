@@ -1,6 +1,7 @@
 package cn.edu.djtu.db;
 
 import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
 import org.junit.jupiter.api.Test;
 
@@ -148,7 +149,7 @@ public class ZookeeperTest {
         // decide whether acquired the lock: if is, use the watcher to occupy the lock, otherwise wait through the Watcher
         // 3) The key here is just the usage of the Watches
         // 4) Some questions: 1. Whether you need synchronization in the client 2. How to achieve the exclusive
-        // 3. 
+        // 3. Why need to under a lock space(just simulate the process not under the namespace): A 
     }
     
     @Test
@@ -162,6 +163,7 @@ public class ZookeeperTest {
             executorService.execute(() -> {
                 try {
                     zooKeeper.create("/concurrent/c1", new byte[0], null, CreateMode.EPHEMERAL);
+                    zooKeeper.create("/concurrent/c2", new byte[1], null, CreateMode.EPHEMERAL);
                 } catch (KeeperException e) {
                     throw new RuntimeException(e);
                 } catch (InterruptedException e) {
@@ -170,5 +172,22 @@ public class ZookeeperTest {
             });
         }
         
+    }
+    
+    @Test
+    void duplicatedCreate() throws IOException {
+        ZooKeeper zooKeeper = new ZooKeeper(address, 3000, event -> System.out.printf("【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString()));
+
+        try {
+            String result1 = zooKeeper.create("/tmp/duplicate1", new byte[1], List.of(new ACL()), CreateMode.EPHEMERAL_SEQUENTIAL);
+            System.out.println(result1);
+            String result2 = zooKeeper.create("/tmp/duplicate1", new byte[1], List.of(new ACL()), CreateMode.EPHEMERAL_SEQUENTIAL);
+            System.out.println(result2);
+        } catch (KeeperException e) {
+            throw new RuntimeException(e);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 }
