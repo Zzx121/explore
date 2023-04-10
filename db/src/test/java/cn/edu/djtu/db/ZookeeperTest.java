@@ -132,14 +132,27 @@ public class ZookeeperTest {
                 System.out.printf("【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString());
             });
             lockKey = UUID.randomUUID().toString();
-            Stat existsStat = zooKeeper.exists(String.join("_", lockSpace, lockSpace), event -> {
-                System.out.printf("Exists watch【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString());
-            });
-            if (existsStat != null) {
-                System.out.println(existsStat);
+            String path = String.join("/", lockSpace, lockKey);
+            synchronized (lockKey) {
+                String createResult = zooKeeper.create(path, new byte[0], ZooDefs.Ids.CREATOR_ALL_ACL, CreateMode.EPHEMERAL_SEQUENTIAL);
+                if (createResult != null) {
+                    //Create successfully
+                } else {
+                    Stat existsStat = zooKeeper.exists(path, event -> {
+                        System.out.printf("Exists watch【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString());
+                    });
+                    if (existsStat != null) {
+                        lockKey.wait();
+                    } else {
+                        lockKey.notifyAll();
+                    }
+                }
             }
+            
         } catch (IOException | KeeperException | InterruptedException e) {
             throw new RuntimeException(e);
+        } finally {
+            //Delete the node
         }
         //The come out of the idea to implement the zookeeper lock is not far away from the best practice: just no polling and 
         //timeout; and just another aspect of implementation: sequential number to decide the acquired client, and the 
@@ -178,12 +191,15 @@ public class ZookeeperTest {
     @Test
     void duplicatedCreate() throws IOException {
         ZooKeeper zooKeeper = new ZooKeeper(address, 3000, event -> System.out.printf("【State】 %s, 【Type】 %s", event.getState().toString(), event.getType().toString()));
-
+        String path = "/test/t1";
         try {
-            String result1 = zooKeeper.create("/test/t1", new byte[1], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
+            String result1 = zooKeeper.create(path, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
             System.out.println(result1);
-            String result2 = zooKeeper.create("/test/t1", new byte[1], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
+            String result2 = zooKeeper.create(path, new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL_SEQUENTIAL);
             System.out.println(result2);
+            //1. create node 2. If success, gained the lock, else wait through the watcher(how that guarantees the single client)
+            //3. release just delete the node 4. can just write the pseudo code and then compare to the zookeeper recipes
+            //5. The synchronization in single JVM maybe not that useful in distributed lock scenarios
         } catch (KeeperException e) {
             throw new RuntimeException(e);
         } catch (InterruptedException e) {

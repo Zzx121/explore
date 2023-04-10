@@ -15,7 +15,7 @@
     <description>Database service</description>
 
     <properties>
-        <java.version>11</java.version>
+        <java.version>17</java.version>
         <spring-cloud.version>Hoxton.SR1</spring-cloud.version>
         <maven-resources-plugin.version>3.1.0</maven-resources-plugin.version>
         <docker-maven-version>1.2.2</docker-maven-version>
@@ -92,7 +92,7 @@
         <dependency>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
-            <version>3.4.11</version>
+            <version>3.4.14</version>
         </dependency>
        <!-- <dependency>
             <groupId>org.springframework.cloud</groupId>
