@@ -39,16 +39,16 @@ path = " "
 start = "^"
 end = "$"
 maze_list = []
+
 for y in range(1, maze_height + 1):
     for x in range(1, maze_width + 1):
         if (x == start_axis[0] and y == start_axis[1]):
             maze_list.append({(x, y): start})
         elif (x == end_axis[0] and y == end_axis[1]):
             maze_list.append({(x, y): end})
-            ## pathes on x
-        elif ((y == start_axis[1] and x > min(start_axis[0], end_axis[0]) and x <= max(start_axis[0], end_axis[0])) or
-              ## pathes on y
-              (x == end_axis[0] and y > min(start_axis[1], end_axis[1]) and y < max(start_axis[1], end_axis[1]))):
+        elif ((y == start_axis[1] and x <= min(start_axis[0])) or
+              (x == maze_width and ((y < start_point and y > end_point) 
+                                    or (y < end_point and y > start_point)))):
             maze_list.append({(x, y): path})
         else:
             if(randint(1, 10) % 2 == 0):
