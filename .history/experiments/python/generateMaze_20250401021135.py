@@ -31,7 +31,7 @@ end_point_size = len(end_point_list)
 if(end_point_size == 0):
     end_axis = start_end_list.pop(randint(0, 2))
 else:
-    end_axis = end_point_list.pop(randint(0, len(end_point_list) - 1))
+    end_axis = end_point_list.pop(randint(0, len(end_point_list)))
 print(f"end axis: {end_axis}")
 end_x = end_axis[0]
 end_y = end_axis[1]
@@ -62,15 +62,8 @@ for y in range(1, maze_height + 1):
 
 ## write to file
 path = Path("maze.txt")
-maze_map = ''
-count = 0
-for m in maze_list:
-    maze_map += list(m.values())[0]
-    count += 1
-    if (count % maze_width == 0):
-        maze_map += "\n"
-path.write_text(maze_map)
-
+path.write_text
 for l in range(int(len(maze_list) / maze_width)):
     end_slice = l + 1
-    print(maze_list[l * maze_width: end_slice * maze_width])
+    # print(maze_list[l * maze_width: end_slice * maze_width])
+    m

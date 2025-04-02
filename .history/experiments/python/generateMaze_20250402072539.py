@@ -69,8 +69,7 @@ for m in maze_list:
     count += 1
     if (count % maze_width == 0):
         maze_map += "\n"
-path.write_text(maze_map)
-
 for l in range(int(len(maze_list) / maze_width)):
     end_slice = l + 1
     print(maze_list[l * maze_width: end_slice * maze_width])
+path.write_text(maze_map)

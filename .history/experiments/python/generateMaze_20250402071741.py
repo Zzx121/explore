@@ -63,14 +63,14 @@ for y in range(1, maze_height + 1):
 ## write to file
 path = Path("maze.txt")
 maze_map = ''
+lineSize = int(len(maze_list) / maze_width)
 count = 0
 for m in maze_list:
     maze_map += list(m.values())[0]
-    count += 1
-    if (count % maze_width == 0):
-        maze_map += "\n"
-path.write_text(maze_map)
-
+    count++
 for l in range(int(len(maze_list) / maze_width)):
     end_slice = l + 1
-    print(maze_list[l * maze_width: end_slice * maze_width])
+    
+    # print(maze_list[l * maze_width: end_slice * maze_width])
+    maze_map += maze_list[l * maze_width: end_slice * maze_width] + '\n'
+path.write_text(maze_map)
